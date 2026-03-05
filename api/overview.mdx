@@ -1,0 +1,260 @@
+---
+title: "API Overview"
+description: "Learn about the Maxw AI REST API architecture, endpoints, and request/response patterns"
+---
+
+## Introduction
+
+The Maxw AI API provides access to AI-powered chat, metadata generation, and authentication services. The API is built on Next.js 16 App Router and uses streaming responses for real-time AI interactions.
+
+## Base URL
+
+All API requests are made to:
+
+```
+https://your-domain.com/api
+```
+
+For local development:
+
+```
+http://localhost:3000/api
+```
+
+## Available Endpoints
+
+### Chat API
+
+<ParamField path="/api/chat" type="POST">
+  Stream AI responses with Claude Sonnet 4.5, supporting tools like web search, code execution, and Canvas LMS integration.
+</ParamField>
+
+### Metadata API
+
+<ParamField path="/api/metadata" type="GET">
+  Retrieve information about available AI agents and their tools.
+</ParamField>
+
+### Authentication
+
+<ParamField path="/api/auth/*" type="GET | POST | PATCH | PUT | DELETE">
+  Better-Auth endpoints for user authentication and session management.
+</ParamField>
+
+### Cron Jobs
+
+<ParamField path="/api/cron/canvas-index" type="GET">
+  Internal endpoint for updating Canvas LMS content index (requires bearer token authorization).
+</ParamField>
+
+## Request Format
+
+### Headers
+
+All requests should include:
+
+```json
+{
+  "Content-Type": "application/json"
+}
+```
+
+Authenticated requests automatically include session cookies from Better-Auth.
+
+### Request Body
+
+API requests expect JSON payloads. Example for `/api/chat`:
+
+<CodeGroup>
+```json POST /api/chat
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "What are my upcoming assignments?"
+    }
+  ],
+  "id": "chat_123",
+  "trigger": "user"
+}
+```
+</CodeGroup>
+
+## Response Format
+
+### Standard JSON Responses
+
+Most endpoints return JSON with this structure:
+
+<ResponseField name="agents" type="array">
+  List of available AI agents
+  <ResponseField name="name" type="string">
+    Agent identifier (e.g., "general")
+  </ResponseField>
+  <ResponseField name="description" type="string">
+    Human-readable agent description
+  </ResponseField>
+  <ResponseField name="tools" type="array">
+    List of tool names available to this agent
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="tools" type="array">
+  List of available tools
+  <ResponseField name="name" type="string">
+    Tool identifier
+  </ResponseField>
+  <ResponseField name="description" type="string">
+    Tool functionality description
+  </ResponseField>
+  <ResponseField name="agent" type="string">
+    Agent that provides this tool
+  </ResponseField>
+</ResponseField>
+
+### Streaming Responses
+
+The `/api/chat` endpoint returns a streaming response using AI SDK's `toUIMessageStreamResponse()` format. This enables real-time token streaming for AI responses.
+
+<CodeGroup>
+```typescript Streaming Format
+// Response is a ReadableStream with chunks:
+{
+  type: "text-delta" | "tool-call" | "tool-result" | "finish",
+  content: string,
+  metadata?: {
+    anthropic?: {
+      containerId?: string,
+      cacheReadInputTokens?: number,
+      cacheCreationInputTokens?: number
+    }
+  }
+}
+```
+</CodeGroup>
+
+## Error Handling
+
+### Error Response Format
+
+All errors follow a consistent structure:
+
+<CodeGroup>
+```json Error Response
+{
+  "error": "Error message",
+  "details": "Additional context (optional)"
+}
+```
+</CodeGroup>
+
+### HTTP Status Codes
+
+<ResponseField name="200" type="Success">
+  Request completed successfully
+</ResponseField>
+
+<ResponseField name="400" type="Bad Request">
+  Missing required parameters or invalid format
+  
+  Common causes:
+  - Missing `messages` array in chat request
+  - Missing `chatId` parameter
+  - Invalid message format
+</ResponseField>
+
+<ResponseField name="401" type="Unauthorized">
+  Authentication required or session expired
+  
+  **Solution**: Authenticate via `/api/auth` endpoints
+</ResponseField>
+
+<ResponseField name="500" type="Internal Server Error">
+  Server-side processing error
+  
+  The response includes error details when available
+</ResponseField>
+
+## Rate Limiting
+
+<Note>
+  Rate limiting is not currently implemented at the API level. Consider implementing rate limiting for production deployments using middleware or services like Upstash Rate Limit.
+</Note>
+
+## Caching
+
+The `/api/metadata` endpoint includes cache headers:
+
+```http
+Cache-Control: public, max-age=3600
+```
+
+Responses are cached for 1 hour to reduce unnecessary database queries.
+
+## Geolocation Support
+
+The chat API extracts geolocation data from request headers (provided by Vercel Edge Functions) to enable location-aware features:
+
+- Location-aware web search
+- Timezone detection
+- Regional context for AI responses
+
+Geolocation data is automatically included in the agent context and does not require additional configuration.
+
+## Agent Context
+
+Each chat request builds an `AgentContext` that includes:
+
+<ParamField body="userId" type="string" required>
+  Authenticated user ID from session
+</ParamField>
+
+<ParamField body="fullName" type="string">
+  User's display name
+</ParamField>
+
+<ParamField body="schoolName" type="string">
+  User's institution (currently hardcoded to "Harvard University")
+</ParamField>
+
+<ParamField body="classes" type="array">
+  User's Canvas LMS courses with assignments and content
+</ParamField>
+
+<ParamField body="chatId" type="string" required>
+  Unique identifier for this conversation
+</ParamField>
+
+<ParamField body="currentDateTime" type="string">
+  Localized timestamp in user's timezone
+</ParamField>
+
+<ParamField body="timezone" type="string">
+  User's timezone (extracted from geolocation or browser)
+</ParamField>
+
+<ParamField body="country" type="string">
+  User's country code (from Vercel geolocation)
+</ParamField>
+
+<ParamField body="city" type="string">
+  User's city (from Vercel geolocation)
+</ParamField>
+
+<ParamField body="region" type="string">
+  User's region/state (from Vercel geolocation)
+</ParamField>
+
+## Next Steps
+
+<Card title="Authentication" icon="key" href="/api/authentication">
+  Learn how to authenticate requests and manage user sessions
+</Card>
+
+<Card title="Chat API" icon="message" href="/api/chat/streaming">
+  Explore the streaming chat endpoint and AI agent capabilities
+</Card>
+
+<Card title="Database Schema" icon="database" href="/api/schema/user">
+  Understand the data models and relationships
+</Card>

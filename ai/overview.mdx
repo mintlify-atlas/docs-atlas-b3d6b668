@@ -1,0 +1,197 @@
+---
+title: "AI Agent Architecture"
+description: "Overview of the Anthropic Claude-powered AI assistant with native tools and container-based execution"
+---
+
+## Introduction
+
+Maxw AI features a sophisticated AI assistant powered by **Anthropic Claude Sonnet 4.5** with native tool support through the AI SDK v6. The agent uses the `ToolLoopAgent` pattern for multi-step reasoning and tool execution.
+
+## Core Architecture
+
+### Model Configuration
+
+```typescript
+import { anthropic } from "@ai-sdk/anthropic";
+import { ToolLoopAgent } from "ai-sdk-tools";
+
+const agent = new ToolLoopAgent({
+  model: anthropic("claude-sonnet-4-5"),
+  instructions: buildSystemPrompt(context),
+  tools: getGeneralAgentTools(context),
+  providerOptions: {
+    anthropic: {
+      thinking: { type: "enabled", budgetTokens: 10000 },
+      container: { skills: [...] },
+    },
+  },
+});
+```
+
+### Agent Context
+
+Every request builds a dynamic `AgentContext` with current date/time and user information:
+
+<ParamField path="userId" type="string" required>
+  Unique user identifier
+</ParamField>
+
+<ParamField path="fullName" type="string" required>
+  User's full name
+</ParamField>
+
+<ParamField path="schoolName" type="string" required>
+  Name of the user's educational institution
+</ParamField>
+
+<ParamField path="classes" type="CanvasCourse[]" required>
+  Array of user's Canvas LMS courses
+</ParamField>
+
+<ParamField path="currentDateTime" type="string" required>
+  Current date and time formatted in the user's timezone
+</ParamField>
+
+<ParamField path="timezone" type="string" required>
+  User's timezone (e.g., "America/New_York")
+</ParamField>
+
+<ParamField path="chatId" type="string" required>
+  Unique identifier for the current conversation
+</ParamField>
+
+<ParamField path="country" type="string">
+  User's country for location-aware search
+</ParamField>
+
+<ParamField path="city" type="string">
+  User's city for location-aware search
+</ParamField>
+
+<ParamField path="region" type="string">
+  User's region/state for location-aware search
+</ParamField>
+
+## Container-Based Execution
+
+The agent uses Anthropic's code execution containers for running Python code:
+
+- **Persistence**: Files persist across the conversation (~4.5 minute inactivity timeout)
+- **Skills**: Documentation files loaded into the container for reference
+- **Programmatic Tools**: Tools can be called directly from Python code
+- **Parallel Processing**: Multiple operations can run concurrently via `asyncio`
+
+### Container Session Management
+
+Container IDs are stored per chat for reuse:
+
+```typescript
+export const containerSession = pgTable("container_session", {
+  id: text("id").primaryKey(),
+  chatId: text("chat_id").notNull().unique(),
+  containerId: text("container_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+});
+```
+
+## Skills System
+
+Skills are documentation files loaded into the code execution container:
+
+- **canvas-assignments**: Canvas assignment data structure and patterns
+- **todo-management**: Todo data structure and CRUD operations
+- **llm-invocation**: Guide for parallel LLM processing
+
+These skills provide reference documentation that the agent can access during code execution.
+
+## Tool Categories
+
+### Native Anthropic Tools
+
+<CardGroup cols={2}>
+  <Card title="code_execution" icon="code">
+    Python sandbox for calculations and programmatic tool calling
+  </Card>
+  <Card title="web_search" icon="magnifying-glass">
+    Location-aware web search (max 5 per conversation)
+  </Card>
+  <Card title="memory" icon="brain">
+    Filesystem-like persistent user memory
+  </Card>
+  <Card title="web_fetch" icon="globe">
+    Fetch and process web content
+  </Card>
+</CardGroup>
+
+### Custom Tools
+
+<CardGroup cols={2}>
+  <Card title="Canvas LMS" icon="book">
+    Search content, fetch assignments
+  </Card>
+  <Card title="Todo Management" icon="check">
+    CRUD operations for user tasks
+  </Card>
+  <Card title="Study Tools" icon="graduation-cap">
+    Create flashcards and practice questions
+  </Card>
+</CardGroup>
+
+## Programmatic Tool Calling
+
+Tools marked "programmatic only" are called from within Python code execution:
+
+```python
+import json
+import asyncio
+
+# Fetch assignments from all classes
+result = await getClassAssignments({})
+assignments = json.loads(result)
+
+# Create todos for overdue assignments
+for assignment in assignments:
+    if assignment.get('due_at'):
+        await createTodo({
+            "title": f"Complete {assignment['name']}",
+            "dueDate": assignment['due_at'],
+            "canvasContentType": "assignment",
+            "canvasContentId": assignment['id'],
+            "canvasClassId": int(assignment['_classId'])
+        })
+```
+
+**Benefits**:
+- Reduced latency (no round trips to model)
+- Token savings (filter data in Python)
+- Conditional logic based on intermediate results
+- Parallel processing with `asyncio.gather`
+
+## Extended Thinking
+
+The agent uses Claude's extended thinking feature with a 10,000 token budget:
+
+```typescript
+providerOptions: {
+  anthropic: {
+    thinking: { type: "enabled", budgetTokens: 10000 }
+  }
+}
+```
+
+This enables deeper reasoning for complex tasks like assignment prioritization and study planning.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="General Agent" href="/ai/general-agent" icon="robot">
+    Explore the system prompt and capabilities
+  </Card>
+  <Card title="Available Tools" href="/ai/tools" icon="wrench">
+    Complete tool reference and parameters
+  </Card>
+  <Card title="Memory System" href="/ai/memory" icon="brain">
+    Learn about persistent user memory
+  </Card>
+</CardGroup>

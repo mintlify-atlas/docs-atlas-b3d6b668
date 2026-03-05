@@ -1,0 +1,437 @@
+---
+title: "Agent Metadata API"
+description: "Retrieve information about available agents and their tools"
+---
+
+## Overview
+
+The `/api/metadata` endpoint returns information about the AI agents and tools available in Maxw AI. This endpoint is useful for discovering capabilities, displaying tool information in UI, and understanding agent architecture.
+
+<Info>
+  This endpoint is simplified for the current architecture where only the general agent is active. It returns hardcoded metadata with a 1-hour cache duration.
+</Info>
+
+## Endpoint
+
+```
+GET /api/metadata
+```
+
+## Authentication
+
+No authentication required. This endpoint returns public metadata about agent capabilities.
+
+## Response Schema
+
+<ResponseField name="agents" type="AgentMetadata[]">
+  Array of available agents in the system
+  
+  <Expandable title="AgentMetadata">
+    <ResponseField name="name" type="string">
+      Unique agent identifier (e.g., "general")
+    </ResponseField>
+    
+    <ResponseField name="description" type="string">
+      Human-readable description of agent capabilities
+    </ResponseField>
+    
+    <ResponseField name="tools" type="string[]">
+      Array of tool names available to this agent
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="tools" type="ToolMetadata[]">
+  Array of all tools available across agents
+  
+  <Expandable title="ToolMetadata">
+    <ResponseField name="name" type="string">
+      Unique tool identifier
+    </ResponseField>
+    
+    <ResponseField name="description" type="string">
+      What the tool does and when to use it
+    </ResponseField>
+    
+    <ResponseField name="agent" type="string">
+      Which agent provides this tool
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Response Example
+
+```json
+{
+  "agents": [
+    {
+      "name": "general",
+      "description": "AI assistant with web search, code execution, Canvas LMS integration, and study tools",
+      "tools": [
+        "code_execution",
+        "web_search",
+        "searchContent",
+        "createStudySet"
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "name": "code_execution",
+      "description": "Run Python code for calculations, data processing, and programmatic tool calling",
+      "agent": "general"
+    },
+    {
+      "name": "web_search",
+      "description": "Search the web for current information (location-aware)",
+      "agent": "general"
+    },
+    {
+      "name": "searchContent",
+      "description": "Search Canvas LMS content (assignments, pages, syllabus)",
+      "agent": "general"
+    },
+    {
+      "name": "createStudySet",
+      "description": "Create flashcards and practice questions for studying",
+      "agent": "general"
+    }
+  ]
+}
+```
+
+## Current Agent: General
+
+The **general agent** is the primary AI assistant with comprehensive capabilities:
+
+### Native Anthropic Tools
+
+<AccordionGroup>
+  <Accordion title="code_execution">
+    Run Python code in a sandboxed environment for:
+    - Mathematical calculations and data processing
+    - Programmatic tool calling (batch operations)
+    - File manipulation within persistent container
+    - Complex filtering and transformations
+    
+    **Container lifetime**: ~4.5 minutes of inactivity
+  </Accordion>
+  
+  <Accordion title="web_search">
+    Search the web for current information:
+    - Location-aware results based on user geolocation
+    - Maximum 5 searches per conversation
+    - Ideal for queries about "latest", "current", or "recent" information
+    - Returns search results with titles, snippets, and URLs
+  </Accordion>
+  
+  <Accordion title="memory" hidden>
+    Persistent user memory system:
+    - Filesystem-like interface (create, read, update, delete)
+    - Store user preferences, facts, goals, and context
+    - Retrieved automatically across conversations
+    - Enables personalized responses without re-asking questions
+  </Accordion>
+  
+  <Accordion title="web_fetch" hidden>
+    Fetch and process web content:
+    - Download HTML, JSON, or text from URLs
+    - Extract structured information from web pages
+    - Process documentation, articles, or API responses
+  </Accordion>
+</AccordionGroup>
+
+### Custom Integration Tools
+
+<AccordionGroup>
+  <Accordion title="searchContent">
+    **Canvas LMS semantic search**
+    
+    Searches across student's course content:
+    - Assignments and due dates
+    - Course pages and materials
+    - Syllabus documents
+    - Discussion topics
+    
+    Uses Upstash vector search with OpenAI embeddings for semantic matching.
+  </Accordion>
+  
+  <Accordion title="getClassAssignments" hidden>
+    **Programmatic Canvas assignment fetching**
+    
+    Only callable from within `code_execution` blocks:
+    - Fetch from all classes or a specific class
+    - Returns full assignment data for filtering
+    - Ideal for date-based queries ("due this week")
+    - Can be combined with todo creation
+    
+    ```python
+    result = await getClassAssignments({})  # All classes
+    assignments = json.loads(result)
+    ```
+  </Accordion>
+  
+  <Accordion title="getTodos" hidden>
+    **Programmatic todo retrieval**
+    
+    Fetch user's tasks with filtering:
+    - **Views**: today, upcoming, anytime, someday, active, logbook
+    - Returns full todo objects with Canvas links
+    - Includes subtasks and scheduling metadata
+    
+    ```python
+    result = await getTodos({"view": "today"})
+    todos = json.loads(result)
+    ```
+  </Accordion>
+  
+  <Accordion title="createTodo" hidden>
+    **Programmatic todo creation**
+    
+    Create tasks from within code execution:
+    - Link to Canvas assignments automatically
+    - Support scheduled dates and due dates
+    - Add subtasks as structured data
+    - Batch create multiple todos efficiently
+    
+    ```python
+    await createTodo({
+      "title": "Complete problem set",
+      "dueDate": "2026-03-10T23:59:00Z",
+      "canvasContentType": "assignment",
+      "canvasContentId": 12345
+    })
+    ```
+  </Accordion>
+  
+  <Accordion title="updateTodo" hidden>
+    **Programmatic todo updates**
+    
+    Modify existing tasks:
+    - Mark complete/incomplete
+    - Change dates and scheduling
+    - Update subtasks
+    - Move between date types (calendar, anytime, someday)
+  </Accordion>
+  
+  <Accordion title="deleteTodo" hidden>
+    **Programmatic todo deletion**
+    
+    Permanently remove tasks from the system.
+  </Accordion>
+  
+  <Accordion title="createStudySet">
+    **Study material generation**
+    
+    Create flashcard sets for studying:
+    - Generate term/definition pairs
+    - Extract key concepts from content
+    - Support for practice questions
+    
+    <Info>
+      Currently simplified - enhanced features planned for future releases.
+    </Info>
+  </Accordion>
+</AccordionGroup>
+
+## Programmatic Tool Calling
+
+Many tools are designed for **programmatic calling only**, meaning they can only be invoked from within Python `code_execution` blocks:
+
+### Why Programmatic Calling?
+
+<CardGroup cols={2}>
+  <Card title="Reduced Latency" icon="gauge-high">
+    No round trips to the model between tool calls
+  </Card>
+  <Card title="Token Savings" icon="coins">
+    Filter data in Python before adding to context
+  </Card>
+  <Card title="Conditional Logic" icon="code-branch">
+    Make decisions based on intermediate results
+  </Card>
+  <Card title="Batch Operations" icon="layer-group">
+    Process multiple items efficiently in parallel
+  </Card>
+</CardGroup>
+
+### Example Pattern
+
+```python
+import json
+import asyncio
+
+# Fetch all assignments
+result = await getClassAssignments({})
+assignments = json.loads(result)
+
+# Filter assignments due this week
+from datetime import datetime, timedelta
+this_week = datetime.now() + timedelta(days=7)
+
+due_soon = [
+    a for a in assignments 
+    if a.get('due_at') and datetime.fromisoformat(a['due_at']) < this_week
+]
+
+# Create todos in parallel
+await asyncio.gather(*[
+    createTodo({
+        "title": f"Complete {a['name']}",
+        "dueDate": a['due_at'],
+        "canvasContentType": "assignment",
+        "canvasContentId": a['id'],
+        "canvasClassId": int(a['_classId'])
+    })
+    for a in due_soon
+])
+
+print(f"Created {len(due_soon)} todos for assignments due this week")
+```
+
+## Caching
+
+The metadata endpoint includes aggressive caching:
+
+```typescript
+headers: {
+  "Content-Type": "application/json",
+  "Cache-Control": "public, max-age=3600", // 1 hour
+}
+```
+
+<Tip>
+  Since agent configuration rarely changes, the response can be safely cached client-side to reduce API calls.
+</Tip>
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Tool Discovery" icon="compass">
+    Display available tools in chat UI or documentation
+  </Card>
+  <Card title="Capability Checks" icon="circle-check">
+    Verify which features are available before showing UI
+  </Card>
+  <Card title="Agent Architecture" icon="sitemap">
+    Understand system capabilities for integration
+  </Card>
+  <Card title="Documentation" icon="book">
+    Auto-generate tool reference documentation
+  </Card>
+</CardGroup>
+
+## Implementation Details
+
+**Source**: `apps/web/src/app/api/metadata/route.ts`
+
+<Accordion title="View Full Implementation">
+  ```typescript
+  export async function GET() {
+    try {
+      const agents: AgentMetadata[] = [
+        {
+          name: "general",
+          description:
+            "AI assistant with web search, code execution, Canvas LMS integration, and study tools",
+          tools: [
+            "code_execution",
+            "web_search",
+            "searchContent",
+            "createStudySet",
+          ],
+        },
+      ];
+
+      const tools: ToolMetadata[] = [
+        {
+          name: "code_execution",
+          description:
+            "Run Python code for calculations, data processing, and programmatic tool calling",
+          agent: "general",
+        },
+        {
+          name: "web_search",
+          description: "Search the web for current information (location-aware)",
+          agent: "general",
+        },
+        {
+          name: "searchContent",
+          description: "Search Canvas LMS content (assignments, pages, syllabus)",
+          agent: "general",
+        },
+        {
+          name: "createStudySet",
+          description: "Create flashcards and practice questions for studying",
+          agent: "general",
+        },
+      ];
+
+      const response: MetadataResponse = {
+        agents,
+        tools,
+      };
+
+      return new Response(JSON.stringify(response), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "public, max-age=3600",
+        },
+      });
+    } catch (error) {
+      console.error("Error generating metadata:", error);
+      return new Response(
+        JSON.stringify({ error: "Failed to generate metadata" }),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+  }
+  ```
+</Accordion>
+
+## Error Handling
+
+<ResponseField name="500 Internal Server Error" type="error">
+  Unexpected server error during metadata generation
+  
+  ```json
+  {
+    "error": "Failed to generate metadata"
+  }
+  ```
+</ResponseField>
+
+<Warning>
+  In practice, this endpoint rarely fails since it returns hardcoded data. The error handler exists for future extensibility when metadata may be dynamically generated.
+</Warning>
+
+## Future Enhancements
+
+The metadata endpoint is designed to support future expansion:
+
+- **Multiple agents**: Specialized agents for different domains
+- **Dynamic tool registration**: Tools loaded at runtime
+- **Tool schemas**: Full JSON schema definitions for validation
+- **Agent capabilities**: Fine-grained capability flags (streaming, multimodal, etc.)
+- **Version information**: API versioning and compatibility
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Streaming Chat API" icon="comments" href="/api/chat/streaming">
+    Main chat endpoint with tool execution
+  </Card>
+  <Card title="Agent Configuration" icon="robot" href="/ai/agents/general">
+    System prompt and tool setup
+  </Card>
+  <Card title="Custom Tools" icon="wrench" href="/ai/tools/overview">
+    Tool implementation details
+  </Card>
+  <Card title="Canvas Integration" icon="graduation-cap" href="/integrations/canvas">
+    Canvas LMS data synchronization
+  </Card>
+</CardGroup>

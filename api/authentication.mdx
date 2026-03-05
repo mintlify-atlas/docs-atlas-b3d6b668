@@ -1,0 +1,464 @@
+---
+title: "Authentication"
+description: "Authenticate users with Better-Auth and manage sessions in Maxw AI"
+---
+
+## Overview
+
+Maxw AI uses [Better-Auth](https://better-auth.com) for authentication and session management. Better-Auth provides a secure, flexible authentication system with support for email/password and OAuth providers.
+
+## Authentication Flow
+
+### 1. Sign Up
+
+Users create accounts via email and password:
+
+<CodeGroup>
+```typescript Client-Side
+import { authClient } from "@/lib/auth-client";
+
+const { data, error } = await authClient.signUp.email({
+  email: "user@example.com",
+  password: "securepassword123",
+  name: "John Doe"
+});
+```
+
+```bash cURL
+curl -X POST https://your-domain.com/api/auth/sign-up/email \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "securepassword123",
+    "name": "John Doe"
+  }'
+```
+</CodeGroup>
+
+### 2. Sign In
+
+Authenticate with existing credentials:
+
+<CodeGroup>
+```typescript Client-Side
+import { authClient } from "@/lib/auth-client";
+
+const { data, error } = await authClient.signIn.email({
+  email: "user@example.com",
+  password: "securepassword123"
+});
+```
+
+```bash cURL
+curl -X POST https://your-domain.com/api/auth/sign-in/email \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "securepassword123"
+  }'
+```
+</CodeGroup>
+
+### 3. Session Management
+
+Better-Auth automatically creates session cookies with these attributes:
+
+<ParamField cookie="sameSite" type="string" default="none">
+  Allows cross-site requests (required for Expo mobile app)
+</ParamField>
+
+<ParamField cookie="secure" type="boolean" default="true">
+  Requires HTTPS in production
+</ParamField>
+
+<ParamField cookie="httpOnly" type="boolean" default="true">
+  Prevents JavaScript access to cookie (security best practice)
+</ParamField>
+
+## Auth API Endpoints
+
+Better-Auth exposes multiple HTTP methods at `/api/auth/[...all]`:
+
+### Core Endpoints
+
+<ParamField path="POST /api/auth/sign-up/email" type="POST">
+  Create a new user account with email and password
+  
+  **Request Body:**
+  ```json
+  {
+    "email": "string",
+    "password": "string",
+    "name": "string"
+  }
+  ```
+</ParamField>
+
+<ParamField path="POST /api/auth/sign-in/email" type="POST">
+  Authenticate with email and password
+  
+  **Request Body:**
+  ```json
+  {
+    "email": "string",
+    "password": "string"
+  }
+  ```
+</ParamField>
+
+<ParamField path="POST /api/auth/sign-out" type="POST">
+  Invalidate current session and clear cookies
+</ParamField>
+
+<ParamField path="GET /api/auth/session" type="GET">
+  Retrieve current session data
+  
+  **Response:**
+  ```json
+  {
+    "session": {
+      "id": "string",
+      "userId": "string",
+      "expiresAt": "timestamp",
+      "token": "string"
+    },
+    "user": {
+      "id": "string",
+      "email": "string",
+      "name": "string",
+      "emailVerified": boolean,
+      "image": "string | null",
+      "settings": {}
+    }
+  }
+  ```
+</ParamField>
+
+<ParamField path="PATCH /api/auth/update-user" type="PATCH">
+  Update user profile information
+</ParamField>
+
+<ParamField path="PUT /api/auth/change-password" type="PUT">
+  Change user password (requires current password)
+</ParamField>
+
+<ParamField path="DELETE /api/auth/delete-user" type="DELETE">
+  Delete user account and all associated data
+</ParamField>
+
+## Making Authenticated Requests
+
+### Server-Side (Next.js)
+
+Use the `auth.api.getSession()` method to verify authentication:
+
+<CodeGroup>
+```typescript API Route
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
+
+export async function POST(request: Request) {
+  // Get session from request headers
+  const authData = await auth.api.getSession({ 
+    headers: await headers() 
+  });
+
+  // Check if user is authenticated
+  if (!authData?.user) {
+    return new Response(
+      JSON.stringify({ error: "Unauthorized" }), 
+      { status: 401 }
+    );
+  }
+
+  const userId = authData.user.id;
+  const userEmail = authData.user.email;
+  
+  // Process authenticated request...
+}
+```
+</CodeGroup>
+
+### Client-Side (React)
+
+The Better-Auth client automatically manages session cookies:
+
+<CodeGroup>
+```typescript React Component
+import { authClient } from "@/lib/auth-client";
+import { useSession } from "@/hooks/use-session";
+
+function ProtectedComponent() {
+  const { data: session, isPending } = useSession();
+
+  if (isPending) return <div>Loading...</div>;
+  if (!session?.user) return <div>Please sign in</div>;
+
+  return <div>Welcome, {session.user.name}!</div>;
+}
+```
+</CodeGroup>
+
+## Database Schema
+
+Better-Auth uses these tables in PostgreSQL:
+
+### User Table
+
+<ResponseField name="user" type="table">
+  Core user accounts
+  
+  <ResponseField name="id" type="text" required>
+    Primary key, auto-generated unique identifier
+  </ResponseField>
+  
+  <ResponseField name="name" type="text" required>
+    User's display name
+  </ResponseField>
+  
+  <ResponseField name="email" type="text" required>
+    Unique email address
+  </ResponseField>
+  
+  <ResponseField name="emailVerified" type="boolean" default="false">
+    Whether email has been verified
+  </ResponseField>
+  
+  <ResponseField name="image" type="text">
+    Profile image URL (optional)
+  </ResponseField>
+  
+  <ResponseField name="settings" type="jsonb" default="{}">
+    User preferences and configuration (Canvas API tokens, etc.)
+  </ResponseField>
+  
+  <ResponseField name="createdAt" type="timestamp">
+    Account creation timestamp
+  </ResponseField>
+  
+  <ResponseField name="updatedAt" type="timestamp">
+    Last update timestamp
+  </ResponseField>
+</ResponseField>
+
+### Session Table
+
+<ResponseField name="session" type="table">
+  Active user sessions
+  
+  <ResponseField name="id" type="text" required>
+    Primary key
+  </ResponseField>
+  
+  <ResponseField name="token" type="text" required>
+    Unique session token (stored in HTTP-only cookie)
+  </ResponseField>
+  
+  <ResponseField name="userId" type="text" required>
+    Foreign key to user table
+  </ResponseField>
+  
+  <ResponseField name="expiresAt" type="timestamp" required>
+    Session expiration time
+  </ResponseField>
+  
+  <ResponseField name="ipAddress" type="text">
+    IP address of session creation
+  </ResponseField>
+  
+  <ResponseField name="userAgent" type="text">
+    Browser/client user agent string
+  </ResponseField>
+  
+  <ResponseField name="createdAt" type="timestamp">
+    Session creation timestamp
+  </ResponseField>
+  
+  <ResponseField name="updatedAt" type="timestamp">
+    Last activity timestamp
+  </ResponseField>
+</ResponseField>
+
+### Account Table
+
+<ResponseField name="account" type="table">
+  OAuth provider credentials (for future OAuth integration)
+  
+  <ResponseField name="id" type="text" required>
+    Primary key
+  </ResponseField>
+  
+  <ResponseField name="accountId" type="text" required>
+    Provider-specific account ID
+  </ResponseField>
+  
+  <ResponseField name="providerId" type="text" required>
+    OAuth provider (e.g., "google", "github")
+  </ResponseField>
+  
+  <ResponseField name="userId" type="text" required>
+    Foreign key to user table
+  </ResponseField>
+  
+  <ResponseField name="accessToken" type="text">
+    OAuth access token
+  </ResponseField>
+  
+  <ResponseField name="refreshToken" type="text">
+    OAuth refresh token
+  </ResponseField>
+  
+  <ResponseField name="accessTokenExpiresAt" type="timestamp">
+    Access token expiration
+  </ResponseField>
+  
+  <ResponseField name="scope" type="text">
+    OAuth permission scopes
+  </ResponseField>
+</ResponseField>
+
+### Verification Table
+
+<ResponseField name="verification" type="table">
+  Email verification tokens
+  
+  <ResponseField name="id" type="text" required>
+    Primary key
+  </ResponseField>
+  
+  <ResponseField name="identifier" type="text" required>
+    Email address being verified
+  </ResponseField>
+  
+  <ResponseField name="value" type="text" required>
+    Verification token
+  </ResponseField>
+  
+  <ResponseField name="expiresAt" type="timestamp" required>
+    Token expiration time
+  </ResponseField>
+</ResponseField>
+
+## Security Best Practices
+
+### Session Security
+
+<Note>
+  Sessions automatically expire based on the `expiresAt` timestamp. Better-Auth handles token rotation and invalidation.
+</Note>
+
+**Session cookies include:**
+- `httpOnly: true` - Prevents XSS attacks
+- `secure: true` - Requires HTTPS (production)
+- `sameSite: "none"` - Required for mobile app (Expo)
+
+### Password Requirements
+
+Implement password validation on the client side:
+
+```typescript
+const passwordSchema = z
+  .string()
+  .min(8, "Password must be at least 8 characters")
+  .regex(/[A-Z]/, "Password must contain an uppercase letter")
+  .regex(/[0-9]/, "Password must contain a number");
+```
+
+### Rate Limiting
+
+<Warning>
+  Consider implementing rate limiting on authentication endpoints to prevent brute force attacks. Use middleware or services like Upstash Rate Limit.
+</Warning>
+
+## Error Responses
+
+### Authentication Errors
+
+<CodeGroup>
+```json Invalid Credentials
+{
+  "error": "Invalid email or password",
+  "code": "INVALID_CREDENTIALS"
+}
+```
+
+```json Session Expired
+{
+  "error": "Session expired",
+  "code": "SESSION_EXPIRED"
+}
+```
+
+```json Email Already Exists
+{
+  "error": "Email already registered",
+  "code": "EMAIL_EXISTS"
+}
+```
+
+```json Unauthorized
+{
+  "error": "Unauthorized",
+  "code": "UNAUTHORIZED"
+}
+```
+</CodeGroup>
+
+## Mobile App (Expo)
+
+The Better-Auth Expo plugin enables authentication in the React Native app:
+
+<CodeGroup>
+```typescript Expo Configuration
+import { expo } from "@better-auth/expo";
+import { betterAuth } from "better-auth";
+
+export const auth = betterAuth({
+  // ... other config
+  trustedOrigins: ["exp://"],
+  advanced: {
+    defaultCookieAttributes: {
+      sameSite: "none",
+      secure: true,
+      httpOnly: true,
+    },
+  },
+  plugins: [expo()],
+});
+```
+</CodeGroup>
+
+The `expo()` plugin handles session persistence in React Native's secure storage.
+
+## Environment Variables
+
+Required environment variables for authentication:
+
+<ParamField env="AUTH_SECRET" type="string" required>
+  Secret key for signing session tokens (generate with `openssl rand -base64 32`)
+</ParamField>
+
+<ParamField env="DATABASE_URL" type="string" required>
+  PostgreSQL connection string for storing auth data
+</ParamField>
+
+Configure in your `.env` file:
+
+```bash
+AUTH_SECRET="your-secret-key-here"
+DATABASE_URL="postgresql://user:password@host:5432/database"
+```
+
+## Next Steps
+
+<Card title="Chat API" icon="message" href="/api/chat/streaming">
+  Make authenticated requests to the AI chat endpoint
+</Card>
+
+<Card title="User Schema" icon="database" href="/api/schema/user">
+  Learn about user data models and settings
+</Card>
+
+<Card title="Better-Auth Docs" icon="book" href="https://better-auth.com">
+  Explore Better-Auth documentation for advanced features
+</Card>

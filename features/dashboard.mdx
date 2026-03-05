@@ -1,0 +1,398 @@
+---
+title: Dashboard
+description: Your educational hub for courses, assignments, tasks, and study materials at a glance
+---
+
+The Maxw AI dashboard provides a centralized overview of your academic life. See your classes, upcoming assignments, pending tasks, and study progress all in one place.
+
+## Overview
+
+The dashboard is your home base in Maxw AI, offering quick access to:
+
+- Recent classes from Canvas
+- Upcoming assignments and due dates
+- Pending tasks from your todo list
+- Navigation to all major features
+
+## Dashboard Layout
+
+The dashboard uses a clean, organized layout with these main sections:
+
+### Dashboard Header
+
+A personalized greeting displays:
+
+- **Time-based greeting**: "Good morning", "Good afternoon", or "Good evening"
+- **Your first name**: Pulled from your user profile
+- **Welcome message**: "Welcome back to your workspace"
+
+The greeting updates automatically based on the current time of day.
+
+```typescript
+// Greeting logic
+const hour = new Date().getHours();
+if (hour < 12) return "Good morning";
+if (hour < 18) return "Good afternoon";
+return "Good evening";
+```
+
+### Dashboard Cards
+
+Information is organized into cards with consistent styling:
+
+- Icon-based headers
+- Card titles
+- Main content area
+- Optional action links
+
+## Dashboard Sections
+
+### Recent Classes
+
+Displays your most recent Canvas courses:
+
+<Card title="Recent Classes" icon="book">
+  - Shows up to 4 most recent courses
+  - Each course card displays:
+    - Course name (clickable to view details)
+    - Course code
+  - Grid layout (2 columns)
+  - Hover effect for interactivity
+  - Empty state: "No classes found"
+</Card>
+
+**Navigation**: Click any course to view full course details, assignments, and materials.
+
+### Upcoming Assignments
+
+Shows your next assignments from Canvas:
+
+<Card title="Upcoming Assignments" icon="school">
+  - Displays up to 3 upcoming assignments
+  - Each assignment shows:
+    - Assignment name (links to Canvas)
+    - Points possible
+    - Due date (human-readable format)
+  - "View all classes" action link
+  - Empty state: "No upcoming assignments! Enjoy your break."
+</Card>
+
+**Due date formatting**:
+
+- "Today" for assignments due today
+- "Tomorrow" for assignments due tomorrow
+- "Next [Day]" for assignments due within the week
+- Full date for assignments further out
+
+Provided by the `humanReadableDate()` utility function.
+
+### Tasks Summary
+
+Quick overview of your todo list:
+
+<Card title="Tasks" icon="list-check">
+  - Shows first 3 pending tasks
+  - Each task displays:
+    - Checkbox icon (visual only)
+    - Task title ("Untitled task" if no title)
+  - "Go to list" action link to full todo page
+  - Empty state: "No pending tasks. Good job!"
+</Card>
+
+**Task filtering**: Only shows unchecked (incomplete) tasks, sorted by priority.
+
+## Component Structure
+
+### DashboardHeader Component
+
+Location: `apps/web/src/components/dashboard/dashboard-header.tsx`
+
+**Features**:
+
+- Uses Better-Auth session for user data
+- `useMemo` hook for efficient greeting calculation
+- Responsive typography with serif font for title
+- Muted foreground color for secondary text
+
+### DashboardCard Component
+
+Location: `apps/web/src/components/dashboard/dashboard-card.tsx`
+
+Shared card wrapper providing:
+
+- Consistent styling across all cards
+- Icon-based headers
+- Action link support
+- Content area with custom class names
+
+**Props**:
+
+- `icon`: Tabler icon component
+- `title`: Card header text
+- `actions`: Array of action links
+- `contentClassName`: Custom styles for content area
+
+### RecentClasses Component
+
+Location: `apps/web/src/components/dashboard/recent-classes.tsx`
+
+**Props**:
+
+- `courses`: Array of `CanvasCourse` objects
+
+**Displays**:
+
+- 2-column responsive grid
+- Course name and course code
+- Hover effects for links
+- Truncated text with `line-clamp-1`
+
+### UpcomingAssignments Component
+
+Location: `apps/web/src/components/dashboard/upcoming-assignments.tsx`
+
+**Props**:
+
+- `assignments`: Array of `CanvasTodoItem` objects
+
+**Features**:
+
+- External links to Canvas (open in new tab)
+- Points and due date display
+- Human-readable date formatting
+- Responsive layout
+
+### TodoSummary Component
+
+Location: `apps/web/src/components/dashboard/todo-summary.tsx`
+
+**Data source**: Uses `useTodos()` hook from `apps/web/src/app/todo/use-todos`
+
+**Features**:
+
+- Filters for unchecked tasks
+- Limits to 3 items
+- Visual checkbox indicators
+- Fallback for untitled tasks
+
+## Data Flow
+
+### Canvas Data
+
+Canvas information is loaded server-side:
+
+1. Dashboard page calls `getAllCanvasCourses()`
+2. Fetches courses from Canvas API
+3. Retrieves upcoming assignments via Canvas Todo API
+4. Passes data as props to dashboard components
+
+### Todo Data
+
+Todo information uses client-side fetching:
+
+1. `TodoSummary` component calls `useTodos()` hook
+2. Hook queries backend API for user's todos
+3. React Query manages caching and updates
+4. Component filters and displays first 3 pending items
+
+### User Data
+
+User information from Better-Auth:
+
+1. `DashboardHeader` uses `authClient.useSession()`
+2. Retrieves current user session
+3. Extracts user name for personalized greeting
+4. Session persists across navigation
+
+## Navigation Links
+
+The dashboard provides quick navigation:
+
+<CardGroup cols={3}>
+  <Card title="Classes" icon="book">
+    View all Canvas courses and course materials
+  </Card>
+  
+  <Card title="Todo List" icon="check">
+    Manage tasks and assignments
+  </Card>
+  
+  <Card title="Study" icon="brain">
+    Access study sets and flashcards
+  </Card>
+</CardGroup>
+
+Each card includes contextual "View all" or "Go to" links.
+
+## Responsive Design
+
+The dashboard adapts to different screen sizes:
+
+- **Desktop**: Multi-column grid layouts, full content visible
+- **Tablet**: Adjusted column counts, maintained spacing
+- **Mobile**: Single-column stacking, touch-optimized interactions
+
+Using TailwindCSS responsive utilities:
+
+- `grid-cols-1 md:grid-cols-2 lg:grid-cols-3`
+- Responsive padding and margins
+- Mobile-first design approach
+
+## Empty States
+
+When no data is available, friendly messages appear:
+
+- **No classes**: "No classes found."
+- **No assignments**: "No upcoming assignments! Enjoy your break."
+- **No tasks**: "No pending tasks. Good job!"
+
+Empty states prevent confusion and provide encouragement.
+
+## Visual Design
+
+### Color Scheme
+
+- **Primary text**: Default foreground color
+- **Secondary text**: Muted foreground
+- **Cards**: Card background with border
+- **Hover states**: Accent background at 50% opacity
+
+### Typography
+
+- **Header**: Large serif font (4xl) for warmth
+- **Card titles**: Medium weight, appropriate sizing
+- **Body text**: Regular weight, readable line heights
+- **Muted text**: Subtle secondary information
+
+### Icons
+
+Icons from Tabler Icons:
+
+- `IconBooks`: Recent classes
+- `IconSchool`: Upcoming assignments
+- `IconListCheck`: Tasks summary
+
+Consistent icon sizing and muted coloring.
+
+## Accessibility
+
+- Semantic HTML structure with proper headings
+- ARIA labels on interactive elements
+- Keyboard navigation support
+- Focus indicators on links and buttons
+- Sufficient color contrast for readability
+
+## Performance Optimization
+
+### Efficient Rendering
+
+- `useMemo` for greeting calculation (prevents unnecessary recalculation)
+- Component-level data fetching (parallel loading)
+- React Query caching for todo data
+- Limited item counts (3-4 items per section)
+
+### Data Loading
+
+- Server-side Canvas data (faster initial load)
+- Client-side todo data (dynamic updates)
+- Cached session data (no repeated auth checks)
+- Conditional rendering based on data availability
+
+## Integration Points
+
+### With Canvas LMS
+
+Dashboard displays:
+
+- Active courses from Canvas API
+- Upcoming assignments from Canvas Todo API
+- Direct links to Canvas content
+- Real-time course information
+
+### With Todo System
+
+Dashboard shows:
+
+- Pending tasks from todo database
+- Task titles and completion status
+- Link to full todo application
+- Live updates via React Query
+
+### With Study Tools
+
+Future integration:
+
+- Recent study sets
+- Study progress and streaks
+- Upcoming study sessions
+- Study goals and achievements
+
+## Customization Options
+
+### Potential Enhancements
+
+- Customizable card order
+- Widget selection (show/hide cards)
+- Number of items per card (3, 5, 10)
+- Theme customization
+- Dashboard layouts (compact, comfortable, spacious)
+
+### User Preferences
+
+Store in user settings:
+
+- Preferred greeting style
+- Default view on login
+- Card visibility preferences
+- Item count per section
+
+## Best Practices
+
+1. **Check dashboard daily**: Stay updated on assignments and tasks
+2. **Use quick links**: Navigate efficiently to detailed views
+3. **Review empty states**: When sections are clear, you're caught up
+4. **Click through**: Dashboard is a preview—click for full details
+5. **Personalize later**: Customize when customization options are added
+
+## Technical Implementation
+
+### Component Hierarchy
+
+```
+Dashboard Page
+├── DashboardHeader
+│   └── Session data (name, greeting)
+├── RecentClasses
+│   └── Course cards (from Canvas API)
+├── UpcomingAssignments
+│   └── Assignment items (from Canvas Todo API)
+└── TodoSummary
+    └── Task items (from todo database)
+```
+
+### Data Sources
+
+- **Canvas courses**: `getAllCanvasCourses()` server action
+- **Canvas assignments**: Canvas Todo API via server action
+- **Todos**: `useTodos()` hook → `/api/todos` endpoint
+- **User session**: Better-Auth session hook
+
+### Styling Approach
+
+All styling uses TailwindCSS 4:
+
+- Utility-first classes
+- Custom components from shadcn/ui
+- Consistent spacing and sizing
+- Dark mode support via CSS variables
+
+## Future Enhancements
+
+Planned dashboard features:
+
+- **Study progress widget**: Weekly study time and goals
+- **Grade tracking**: GPA and grade trends
+- **Calendar view**: Visual timeline of assignments and tasks
+- **Notifications**: Upcoming deadlines and reminders
+- **Quick actions**: Create task, start study session from dashboard
+- **Analytics**: Productivity insights and completion rates

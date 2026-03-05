@@ -1,0 +1,357 @@
+---
+title: "General Agent"
+description: "System prompt, capabilities, and configuration for the general-purpose student assistant"
+---
+
+## Overview
+
+The general agent is the primary AI assistant for students, capable of web search, code execution, Canvas LMS integration, and memory management.
+
+## System Prompt Structure
+
+The system prompt is built dynamically for each request:
+
+```typescript
+export function buildSystemPrompt(ctx: AgentContext): string {
+  return `You are a general assistant and coordinator for students at ${ctx.schoolName}.
+
+🔍 YOUR CAPABILITIES:
+- **Web search**: Search for current information beyond your knowledge cutoff
+- **Code execution**: Run Python code for calculations, data processing, and analysis
+- **Programmatic tool calling**: Chain multiple tool calls efficiently within code
+- **Document processing**: Create and edit PowerPoint, Word, Excel, and PDF files
+- **Canvas LMS search**: Search student's course content, assignments, and materials
+- **Memory**: Remember important information about the user across conversations
+
+🎯 CURRENT CONTEXT:
+- **Date/Time**: ${ctx.currentDateTime} (${ctx.timezone})
+- **School**: ${ctx.schoolName}
+- **User**: ${ctx.fullName}
+...`;
+}
+```
+
+## AgentContext Interface
+
+The context object passed to all agent functions:
+
+<ResponseField name="AgentContext" type="interface">
+  <Expandable title="properties" defaultOpen>
+    <ResponseField name="userId" type="string" required>
+      Unique user identifier
+    </ResponseField>
+    <ResponseField name="fullName" type="string" required>
+      User's full name for personalization
+    </ResponseField>
+    <ResponseField name="schoolName" type="string" required>
+      Educational institution name
+    </ResponseField>
+    <ResponseField name="classes" type="CanvasCourse[]" required>
+      Array of Canvas LMS courses with id, name, original_name
+    </ResponseField>
+    <ResponseField name="currentDateTime" type="string" required>
+      Current date/time formatted in user's timezone
+    </ResponseField>
+    <ResponseField name="timezone" type="string" required>
+      IANA timezone identifier (e.g., "America/New_York")
+    </ResponseField>
+    <ResponseField name="chatId" type="string" required>
+      Unique conversation identifier for container session tracking
+    </ResponseField>
+    <ResponseField name="country" type="string">
+      User's country for location-aware web search
+    </ResponseField>
+    <ResponseField name="city" type="string">
+      User's city for location-aware web search
+    </ResponseField>
+    <ResponseField name="region" type="string">
+      User's region/state for location-aware web search
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Tool Configuration
+
+Tools are configured with provider-specific options:
+
+```typescript
+export function getGeneralAgentTools(ctx: AgentContext): Record<string, any> {
+  return {
+    // Code execution with programmatic tool calling
+    code_execution: anthropic.tools.codeExecution_20250825(),
+
+    // Memory tool with filesystem-like interface
+    memory: anthropic.tools.memory_20250818({
+      execute: async (action) => {
+        return await executeMemoryCommand(ctx.userId, action);
+      },
+    }),
+
+    // Location-aware web search
+    web_search: anthropic.tools.webSearch_20250305({
+      userLocation: {
+        type: "approximate",
+        city: ctx.city,
+        country: ctx.country,
+        region: ctx.region,
+        timezone: ctx.timezone,
+      },
+    }),
+
+    web_fetch: anthropic.tools.webFetch_20250910(),
+
+    // Canvas LMS tools
+    searchContent: searchContentTool,
+    getClassAssignments: getClassAssignmentsTool,
+
+    // Todo management
+    getTodos: getTodosTool,
+    createTodo: createTodoTool,
+    updateTodo: updateTodoTool,
+    deleteTodo: deleteTodoTool,
+
+    // Study tools
+    createStudySet: createStudySetTool,
+  };
+}
+```
+
+## Programmatic Tool Calling Pattern
+
+The agent is instructed to use Python for complex workflows:
+
+<CodeGroup>
+
+```python Basic Usage
+import json
+import asyncio
+
+# Fetch all assignments
+result = await getClassAssignments({})
+assignments = json.loads(result)
+
+# Filter and process
+overdue = [a for a in assignments if is_overdue(a['due_at'])]
+print(f"Found {len(overdue)} overdue assignments")
+```
+
+```python Parallel Processing
+import json
+import asyncio
+
+# Fetch assignments
+result = await getClassAssignments({})
+assignments = json.loads(result)
+
+# Classify priority in parallel
+async def classify_priority(assignment):
+    result = await invokeLLM({
+        "prompt": f"Classify priority for: {assignment['name']}",
+        "priority": "speed",
+        "schema": {"priority": "string (high/medium/low)"}
+    })
+    response = json.loads(result)
+    return {
+        "assignment": assignment,
+        "priority": response["data"]["priority"]
+    }
+
+# Process in parallel
+classified = await asyncio.gather(
+    *[classify_priority(a) for a in assignments[:20]]
+)
+
+# Create todos for high priority
+for item in classified:
+    if item["priority"] == "high":
+        await createTodo({
+            "title": f"Complete {item['assignment']['name']}",
+            "dueDate": item['assignment']['due_at'],
+            "canvasContentType": "assignment",
+            "canvasContentId": item['assignment']['id'],
+            "canvasClassId": int(item['assignment']['_classId'])
+        })
+```
+
+```python Todo Management
+import json
+
+# Get today's todos
+todos_json = await getTodos({"view": "today"})
+todos = json.loads(todos_json)
+
+# Mark completed
+for todo in todos:
+    if todo['title'].startswith('[DONE]'):
+        await updateTodo({
+            "id": todo['id'],
+            "checked": True
+        })
+
+# Create new todo with Canvas link
+await createTodo({
+    "title": "Study for Math Quiz",
+    "dateType": "calendar",
+    "scheduledDate": "2026-03-08T14:00:00Z",
+    "dueDate": "2026-03-10T23:59:00Z",
+    "canvasContentType": "quiz",
+    "canvasContentId": 12345,
+    "canvasClassId": 67890
+})
+```
+
+</CodeGroup>
+
+## Location-Aware Web Search
+
+Web search automatically uses the user's location:
+
+```typescript
+web_search: anthropic.tools.webSearch_20250305({
+  userLocation: {
+    type: "approximate",
+    city: ctx.city,        // e.g., "Boston"
+    country: ctx.country,  // e.g., "USA"
+    region: ctx.region,    // e.g., "Massachusetts"
+    timezone: ctx.timezone // e.g., "America/New_York"
+  }
+})
+```
+
+This enables queries like "best coffee shops near me" to return location-relevant results.
+
+## Style Guidelines
+
+From the system prompt:
+
+<Accordion title="Tone and Formatting Rules">
+  - Default style is **natural, chatty, and playful**, not formal
+  - Keep tone **topic-appropriate** and matched to the user
+  - Brief responses for casual conversation
+  - Use emojis and casual punctuation if user does
+  - **Only in prose** (not in section headers)
+  - **Don't use Markdown sections/lists** in casual chat unless asked
+  - Use **h1 (#)** for section headers, not bold
+  - Format structured responses with Markdown
+  - Use LaTeX for math: `$$x^2 + y^2 = z^2$$`
+  - Refer to classes by **friendly name only** (IDs are internal)
+  - Convert technical formats (snake_case, UUIDs, paths) to plain language
+  - Keep content appropriate for ages 13-18
+</Accordion>
+
+<Accordion title="Behavioral Guidelines">
+  - **Never say "I don't have access to the internet"** - use web_search!
+  - Use tools proactively without asking permission
+  - **Check memory first** to avoid asking redundant questions
+  - **Proactively save important facts** to memory
+  - Convert developer formats to plain language before answering
+</Accordion>
+
+## Skills Available
+
+Documentation loaded into the code execution container:
+
+<CardGroup cols={3}>
+  <Card title="canvas-assignments" icon="book">
+    Canvas assignment data structure, fields, date handling, common patterns
+  </Card>
+  <Card title="todo-management" icon="check">
+    Todo data structure, views, date types, Canvas linking, CRUD operations
+  </Card>
+  <Card title="llm-invocation" icon="robot">
+    Guide to using invokeLLM for parallel processing and classification
+  </Card>
+</CardGroup>
+
+## User Classes Context
+
+The agent receives a formatted list of the user's classes:
+
+```typescript
+ctx.classes.map((course) => `- ${course.name} (ID: ${course.id})`).join("\n")
+```
+
+Example output:
+```
+📚 USER'S CLASSES:
+- Calculus I (ID: 12345)
+- Introduction to Psychology (ID: 67890)
+- English Composition (ID: 11111)
+```
+
+## Implementation Reference
+
+<CodeGroup>
+
+```typescript Agent Configuration
+// apps/web/src/ai/agents/general.ts
+export interface AgentContext {
+  userId: string;
+  fullName: string;
+  schoolName: string;
+  classes: CanvasCourse[];
+  currentDateTime: string;
+  timezone: string;
+  chatId: string;
+  country?: string;
+  city?: string;
+  region?: string;
+}
+
+export function buildSystemPrompt(ctx: AgentContext): string {
+  // Full system prompt with capabilities, tools, and guidelines
+}
+
+export function getGeneralAgentTools(ctx: AgentContext): Record<string, any> {
+  // Tool configuration with provider options
+}
+```
+
+```typescript API Route
+// apps/web/src/app/api/chat/route.ts
+import { ToolLoopAgent } from "ai-sdk-tools";
+import { anthropic } from "@ai-sdk/anthropic";
+
+const context = buildAppContext({
+  userId,
+  fullName,
+  schoolName,
+  classes,
+  chatId,
+  country,
+  city,
+  region,
+});
+
+const agent = new ToolLoopAgent({
+  model: anthropic("claude-sonnet-4-5"),
+  instructions: buildSystemPrompt(context),
+  tools: getGeneralAgentTools(context),
+  providerOptions: {
+    anthropic: {
+      thinking: { type: "enabled", budgetTokens: 10000 },
+      container: { skills: [...] },
+    },
+  },
+});
+
+const result = await agent.stream({
+  messages: await convertToModelMessages(messages),
+  experimental_transform: smoothStream({ chunking: "word" }),
+});
+
+return result.toUIMessageStreamResponse();
+```
+
+</CodeGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Available Tools" href="/ai/tools" icon="wrench">
+    Explore all Canvas, Todo, and Study tools
+  </Card>
+  <Card title="Memory System" href="/ai/memory" icon="brain">
+    Learn about persistent user memory
+  </Card>
+</CardGroup>

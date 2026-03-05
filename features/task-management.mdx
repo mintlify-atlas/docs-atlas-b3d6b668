@@ -1,0 +1,442 @@
+---
+title: Task Management
+description: Organize your work with a Things 3-inspired todo system featuring flexible scheduling and Canvas integration
+---
+
+Maxw AI features a powerful task management system inspired by Things 3, designed specifically for students. Keep track of assignments, personal tasks, and deadlines with flexible scheduling options.
+
+## Overview
+
+The todo system helps you:
+
+- Organize tasks with flexible date types
+- Link tasks to Canvas assignments
+- Break down work with subtasks
+- View tasks by context (today, upcoming, anytime, someday)
+- Track completion in the logbook
+
+## Task Structure
+
+Each todo item contains:
+
+- **Title**: What needs to be done
+- **Description**: Optional details and notes
+- **Date type**: How the task is scheduled
+- **Scheduled date**: When to work on it
+- **Due date**: Hard deadline
+- **Subtasks**: Checklist of smaller steps
+- **Canvas link**: Optional connection to course assignments
+- **Completion status**: Checked or unchecked
+
+## Date Types
+
+Tasks use four scheduling approaches:
+
+<CardGroup cols={2}>
+  <Card title="Calendar" icon="calendar">
+    Tasks scheduled for a specific day. Work on them during normal hours.
+    
+    **Best for**: Assignments, scheduled work sessions, time-sensitive tasks
+  </Card>
+  
+  <Card title="Calendar Evening" icon="moon">
+    Tasks scheduled for evening time. Separates daytime and evening work.
+    
+    **Best for**: Homework after school, late-night study sessions
+  </Card>
+  
+  <Card title="Anytime" icon="clock">
+    Flexible tasks without a specific date. Do them when you have time.
+    
+    **Best for**: Ongoing projects, reading, low-priority tasks
+  </Card>
+  
+  <Card title="Someday" icon="archive">
+    Future tasks or ideas. Lower priority, for later planning.
+    
+    **Best for**: Long-term goals, project ideas, maybe tasks
+  </Card>
+</CardGroup>
+
+<Note>
+This scheduling system is inspired by Things 3, offering flexibility between rigid calendar dates and open-ended task lists.
+</Note>
+
+## Task Views
+
+The todo page organizes tasks into contextual views:
+
+### Today
+
+Shows tasks to focus on today:
+
+- Calendar tasks scheduled for today
+- Calendar evening tasks for tonight
+- Overdue calendar tasks from past dates
+- Tasks with due dates today or overdue
+- Tasks completed today (in logbook section)
+
+**View count**: Number of incomplete tasks
+
+### Upcoming
+
+Displays future-scheduled work:
+
+- Calendar tasks with scheduled dates in the future
+- Calendar evening tasks for future evenings
+- Helps you plan ahead and see what's coming
+
+**View count**: Number of upcoming tasks
+
+### Anytime
+
+Lists flexible tasks:
+
+- Tasks with `dateType: "anytime"`
+- No specific schedule, do when convenient
+- Useful for ongoing work and side projects
+
+**View count**: Number of anytime tasks
+
+### Someday
+
+Archive of future ideas:
+
+- Tasks with `dateType: "someday"`
+- Lower priority, long-term thinking
+- Review periodically to move items forward
+
+**View count**: Number of someday tasks
+
+### Logbook
+
+Completed tasks:
+
+- All tasks marked as checked
+- Excludes tasks completed today (shown in Today view)
+- Historical record of what you've accomplished
+
+**View description**: "Tasks you've completed"
+
+## Creating Tasks
+
+### Manual Creation
+
+1. Navigate to the todo page
+2. Select the appropriate view (today, upcoming, anytime, someday)
+3. Click "New task"
+4. Enter task details
+5. Set date type and dates
+6. Add subtasks if needed
+7. Link to Canvas assignment (optional)
+
+### Through AI Chat
+
+Ask the AI assistant to create tasks:
+
+```plaintext
+"Add a task to finish my essay by Friday"
+"Create a todo for studying biology tonight"
+"Add all my Canvas assignments to my todo list"
+```
+
+The AI can:
+
+- Create tasks with proper dates and scheduling
+- Automatically link to Canvas assignments
+- Set appropriate date types based on context
+- Add multiple tasks at once
+
+### From Canvas Assignments
+
+Tasks can be linked to Canvas content:
+
+- **canvasClassId**: The course the assignment belongs to
+- **canvasContentId**: The assignment, quiz, or page ID
+- **canvasContentType**: Type of content (assignment, page, quiz, discussion)
+
+Linked tasks show Canvas details and provide quick access to original content.
+
+## Managing Tasks
+
+### Updating Tasks
+
+Modify existing tasks by:
+
+- Clicking to expand task details
+- Editing title, description, or dates
+- Changing date type or scheduled date
+- Adding or removing subtasks
+- Marking as complete or incomplete
+
+### Subtasks
+
+Break down complex tasks:
+
+```typescript
+subTasks: [
+  { id: "uuid-1", title: "Research sources", checked: false },
+  { id: "uuid-2", title: "Write outline", checked: true },
+  { id: "uuid-3", title: "Draft introduction", checked: false }
+]
+```
+
+Each subtask has:
+
+- Unique ID
+- Title describing the step
+- Checked status (independent of parent task)
+
+### Moving Between Views
+
+Change task scheduling by updating:
+
+- **dateType**: Switches the view (calendar → anytime → someday)
+- **scheduledDate**: Moves between today, upcoming, and specific dates
+
+The task automatically appears in the correct view.
+
+### Completing Tasks
+
+When you mark a task complete:
+
+- `checked` is set to `true`
+- `completedAt` timestamp is recorded
+- Task moves to logbook (or Today if completed today)
+- Subtasks remain as completed
+
+### Deleting Tasks
+
+Permanently remove tasks:
+
+- Through the UI by expanding and selecting delete
+- Via AI chat: "Delete my biology task"
+- Deleted tasks cannot be recovered
+
+## Canvas Integration
+
+Tasks deeply integrate with Canvas LMS:
+
+### Assignment Linking
+
+Link tasks to Canvas content types:
+
+- **assignment**: Course assignments with due dates
+- **page**: Course pages and readings
+- **quiz**: Quizzes and exams
+- **discussion**: Discussion board posts
+
+Linked tasks include:
+
+- Assignment name and details
+- Due date from Canvas
+- Points possible
+- Direct link to Canvas
+
+### Automatic Task Creation
+
+Use the AI to batch-create tasks:
+
+```plaintext
+"Add all my Canvas assignments due this week to my todo list"
+```
+
+The AI will:
+
+1. Fetch assignments from all courses
+2. Filter by your criteria (due date, course, etc.)
+3. Create linked todos with proper dates
+4. Set appropriate scheduling (calendar vs. anytime)
+
+### Canvas Data in Tasks
+
+When a task is linked to Canvas:
+
+- View assignment details without leaving the todo app
+- Quick link to open in Canvas
+- Automatic due date syncing
+- Course information displayed
+
+## Database Schema
+
+Tasks are stored with the following structure:
+
+```typescript
+todo {
+  id: string (UUID)
+  userId: string (references user.id)
+  
+  // Core fields
+  title: string
+  description: string | null
+  checked: boolean (default: false)
+  
+  // Scheduling
+  dateType: "calendar" | "calendarEvening" | "anytime" | "someday"
+  scheduledDate: timestamp | null
+  dueDate: timestamp | null
+  
+  // Subtasks
+  subTasks: TodoSubTask[] | null
+  
+  // Canvas linking
+  canvasContentType: "assignment" | "page" | "quiz" | "discussion" | null
+  canvasContentId: number | null
+  canvasClassId: number | null
+  
+  // Metadata
+  completedAt: timestamp | null
+  createdAt: timestamp
+  updatedAt: timestamp
+}
+```
+
+### TodoSubTask Type
+
+```typescript
+type TodoSubTask = {
+  id: string;
+  title: string;
+  checked: boolean;
+};
+```
+
+## AI Task Management
+
+The AI assistant provides programmatic task management:
+
+### getTodos Tool
+
+Retrieve tasks with filtering:
+
+```python
+todos = await getTodos({
+  "view": "today"  # or "upcoming", "anytime", "someday", "active", "logbook"
+})
+```
+
+**Views**:
+
+- `today`: Tasks for today
+- `upcoming`: Future scheduled tasks
+- `anytime`: Flexible tasks
+- `someday`: Future ideas
+- `active`: All incomplete tasks
+- `logbook`: All completed tasks
+
+### createTodo Tool
+
+Create new tasks programmatically:
+
+```python
+await createTodo({
+  "title": "Complete history essay",
+  "dateType": "calendar",
+  "scheduledDate": "2026-03-10T00:00:00Z",
+  "dueDate": "2026-03-12T23:59:59Z",
+  "canvasContentType": "assignment",
+  "canvasContentId": 12345,
+  "canvasClassId": 67890
+})
+```
+
+### updateTodo Tool
+
+Modify existing tasks:
+
+```python
+await updateTodo({
+  "id": "todo-uuid",
+  "checked": true,
+  "scheduledDate": "2026-03-11T00:00:00Z"
+})
+```
+
+### deleteTodo Tool
+
+Remove tasks permanently:
+
+```python
+await deleteTodo({
+  "id": "todo-uuid"
+})
+```
+
+## UI Components
+
+### Todo List Item
+
+Each task displays:
+
+- Checkbox for completion status
+- Title (editable inline)
+- Expand/collapse button for details
+- Canvas assignment icon (if linked)
+- Due date indicator
+
+Expanded view shows:
+
+- Full description
+- Subtask checklist
+- Date controls
+- Canvas link button
+- Delete option
+
+### Sidebar Navigation
+
+Quick access to all views:
+
+- Today (star icon)
+- Upcoming (calendar icon)
+- Anytime (stack icon)
+- Someday (archive icon)
+- Logbook (checklist icon)
+
+Active view highlighted, shows task counts.
+
+### Page Header
+
+Displays:
+
+- Current view name
+- Task count ("5 tasks" or "1 task")
+- Logbook description when applicable
+
+## Best Practices
+
+1. **Use calendar dates for deadlines**: Assignments and time-sensitive work
+2. **Anytime for flexible work**: Reading, ongoing projects, no specific date
+3. **Someday for ideas**: Future goals, things to consider later
+4. **Break down large tasks**: Use subtasks for multi-step assignments
+5. **Link Canvas assignments**: Automatic due dates and course context
+6. **Review regularly**: Check upcoming to plan your week
+7. **Archive completed work**: Logbook provides accomplishment history
+
+## Keyboard Shortcuts
+
+Efficient task management:
+
+- Click checkbox to toggle completion
+- Click task title to expand/collapse
+- Tab through views in sidebar
+
+## Integration with Dashboard
+
+The dashboard shows a todo summary:
+
+- First 3 pending tasks from all views
+- Quick visual of what needs attention
+- "Go to list" link to full todo page
+- Empty state when all tasks complete
+
+## Task Classification Logic
+
+Tasks automatically appear in the correct view based on:
+
+1. **Completion status**: Checked tasks go to logbook (or today if completed today)
+2. **Date type**: Anytime and someday tasks go to their named views
+3. **Scheduled date**: Calendar tasks sorted by date (today, upcoming, or overdue)
+4. **Due date**: Overdue or due-today tasks appear in today view
+5. **Default fallback**: Unclassified tasks go to anytime
+
+This ensures tasks always appear where you expect them.

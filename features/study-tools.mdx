@@ -1,0 +1,294 @@
+---
+title: Study Tools
+description: Create and manage study sets with flashcards and practice questions to improve your learning
+---
+
+Maxw AI's study tools help you create, organize, and review study materials. Generate custom flashcards and practice questions to master any subject.
+
+## Overview
+
+Study tools allow you to create **study sets** containing:
+
+- **Flashcards**: Term and definition pairs for vocabulary and concepts
+- **Practice questions**: Multiple-choice and short-answer questions for testing knowledge
+- **Organized by tags**: Filter and focus on specific topics or categories
+
+## Study Set Types
+
+Each study set can be displayed in different modes:
+
+<Tabs>
+  <Tab title="Flashcards">
+    Classic flashcard interface with terms on one side and definitions on the other. Perfect for vocabulary, formulas, and concept memorization.
+    
+    **Structure**:
+    - `term`: The word, phrase, or concept
+    - `shortDefinition`: Brief explanation
+    - `fullDefinition`: Detailed explanation with context
+  </Tab>
+  
+  <Tab title="Multiple Choice">
+    Practice questions with multiple answer options. Great for exam preparation and knowledge testing.
+    
+    **Structure**:
+    - `prompt`: The question being asked
+    - `options`: List of possible answers (one marked as correct)
+    - `explanation`: Why the correct answer is right
+    - `thinking`: Internal reasoning (not shown to user)
+  </Tab>
+  
+  <Tab title="Short Answer">
+    Open-ended questions that require written responses. Ideal for essay practice and deeper understanding.
+    
+    **Structure**:
+    - `prompt`: The question or prompt
+    - `explanation`: Model answer or key points
+  </Tab>
+</Tabs>
+
+## Creating Study Sets
+
+### Through the AI Chat
+
+The easiest way to create study sets is by asking the AI assistant:
+
+```plaintext
+"Create flashcards for Spanish verbs in chapter 5"
+"Generate practice questions about the American Revolution"
+"Make a study set for organic chemistry functional groups"
+```
+
+The AI will:
+
+1. Analyze your request
+2. Generate appropriate content (terms, questions, or both)
+3. Format with proper LaTeX for mathematical notation
+4. Organize with relevant tags
+5. Display the study set immediately
+
+### Manual Creation
+
+You can also create study sets manually:
+
+1. Navigate to the Study page
+2. Click "New study set"
+3. Choose your display mode
+4. Add terms or questions
+5. Save and start studying
+
+## Study Set Features
+
+### LaTeX Support
+
+Study sets fully support LaTeX for mathematical and scientific notation:
+
+- Wrap formulas with `$$` for inline or display math
+- Example: `$$E = mc^2$$` renders as formatted equation
+- Perfect for chemistry, physics, and math subjects
+
+<Note>
+The AI automatically formats mathematical content with LaTeX when creating study sets.
+</Note>
+
+### Tagging System
+
+Organize study items with tags for better filtering:
+
+- **Subject tags**: Math, Science, History, English
+- **Topic tags**: Photosynthesis, Civil War, Algebra
+- **Difficulty tags**: Easy, Medium, Hard
+- **Custom tags**: Any category you create
+
+When studying, filter by specific tags to focus on certain topics.
+
+## Study Modes
+
+Each study set can be reviewed in multiple ways:
+
+<CardGroup cols={3}>
+  <Card title="Flashcards Mode" icon="cards-blank">
+    Flip through cards showing term and definition. Test your recall before revealing answers.
+  </Card>
+  
+  <Card title="Multiple Choice" icon="list-check">
+    Answer questions with options. Get immediate feedback on correct/incorrect answers.
+  </Card>
+  
+  <Card title="Short Answer" icon="pencil">
+    Practice writing responses. Compare your answer to the provided explanation.
+  </Card>
+</CardGroup>
+
+## Canvas Integration
+
+Study sets integrate with your Canvas courses:
+
+- Search course materials to extract key concepts
+- Generate flashcards from syllabus content
+- Create practice questions from lecture notes
+- Pull vocabulary from reading assignments
+
+Ask the AI to reference your Canvas content:
+
+```plaintext
+"Create flashcards from my Biology 101 syllabus"
+"Generate questions based on last week's history lecture"
+```
+
+## Database Schema
+
+Study materials are stored with the following structure:
+
+### Study Set Table
+
+```typescript
+studySet {
+  id: string (UUID)
+  userId: string (references user)
+  title: string
+  createdAt: timestamp
+}
+```
+
+### Study Set Items Table
+
+```typescript
+studySetItem {
+  id: string (UUID)
+  studySetId: string (references studySet)
+  type: "term" | "question"
+  // Additional fields based on type
+}
+```
+
+Each study set has many items, supporting mixed content (both terms and questions in one set).
+
+## Study Progress Tracking
+
+The study interface tracks your progress:
+
+- Number of items completed
+- Time spent studying
+- Items to review
+- Study streak and goals
+
+<Note>
+Progress tracking features are visible on the study dashboard, showing weekly study time and goal completion.
+</Note>
+
+## Organizing Study Materials
+
+### Study Dashboard
+
+The study page displays:
+
+- **Continue Studying**: Recently accessed study sets
+- **Explore**: All available study sets
+- **Study stats**: Hours studied this week, progress toward goals
+
+### Study Set Cards
+
+Each study set card shows:
+
+- Title of the set
+- Number of questions and terms
+- Associated tags
+- Progress indicators
+
+## Reviewing Study Sets
+
+When you open a study set:
+
+1. Choose your study mode (flashcards, multiple choice, short answer)
+2. Select active tags to filter items (optional)
+3. Click "Start" to begin studying
+4. Navigate through items at your own pace
+5. Track completion and progress
+
+### Filtering by Tags
+
+If a study set has multiple tags:
+
+- Select which tags you want to study
+- Only items with selected tags will appear
+- Useful for focusing on specific topics within a larger set
+
+## AI-Generated Content
+
+When the AI creates study sets, it:
+
+### For Flashcards (Terms)
+
+- Identifies key vocabulary or concepts
+- Provides concise short definitions
+- Includes detailed explanations in full definitions
+- Uses LaTeX for scientific/mathematical terms
+- Adds relevant tags for organization
+
+### For Practice Questions
+
+- Generates clear, focused questions
+- Creates plausible multiple-choice options
+- Marks the correct answer
+- Provides explanations for why answers are correct
+- Uses LaTeX for formulas in STEM subjects
+
+### Quality Features
+
+- **Thinking field**: AI reasons through correct answers before generating options
+- **Varied difficulty**: Mix of easy, medium, and challenging questions
+- **Comprehensive coverage**: Touches on all major topics
+- **Format consistency**: Professional formatting with proper notation
+
+## Best Practices
+
+1. **Be specific with requests**: "Create flashcards for Chapter 5 vocabulary" works better than "make flashcards"
+2. **Use tags effectively**: Organize by topic, difficulty, or exam section
+3. **Mix question types**: Combine terms and questions for comprehensive study
+4. **Review regularly**: Spaced repetition improves retention
+5. **Filter when needed**: Use tags to focus on weak areas
+
+## Example Study Sets
+
+### Science Bowl Practice
+
+- 104 questions covering multiple topics
+- Tags: Math, Earth and Space, Biology
+- Multiple-choice format
+- Perfect for competition prep
+
+### ACT/SAT Practice
+
+- Mix of questions and terms
+- Organized by test section
+- Timed practice mode
+- Comprehensive test preparation
+
+### Course-Specific Sets
+
+Create sets for individual courses:
+
+- Spanish vocabulary by chapter
+- Biology concepts by unit
+- History events and dates
+- Math formulas and theorems
+
+## Integration with Todo List
+
+Connect study sets to your task management:
+
+- Create todos to review specific study sets
+- Schedule study sessions
+- Track study time as task completion
+- Link study sets to assignment due dates
+
+## Future Enhancements
+
+Planned features for study tools:
+
+- Spaced repetition algorithm
+- Performance analytics
+- Collaborative study sets
+- Import/export functionality
+- Audio pronunciations for language learning
+- Image support for visual learners

@@ -1,0 +1,157 @@
+---
+title: "Introduction to Maxw AI"
+description: "An AI-powered educational platform built for students aged 13-18, combining intelligent task management, study tools, and Canvas LMS integration"
+---
+
+## What is Maxw AI?
+
+Maxw AI is a comprehensive educational platform designed specifically for students aged 13-18. It combines advanced AI agents powered by Anthropic's Claude Sonnet 4.5 with practical learning tools to help students stay organized, study effectively, and manage their academic workload.
+
+The platform seamlessly integrates with Canvas LMS, bringing your courses, assignments, and materials into a unified workspace where an intelligent AI assistant helps you navigate your academic journey.
+
+## Who is Maxw AI for?
+
+Maxw AI is designed for:
+
+- **High school students** looking to stay organized and manage their coursework more effectively
+- **Students using Canvas LMS** who want to streamline their assignment workflow
+- **Visual learners** who benefit from flashcards and interactive study materials
+- **Busy students** who need help prioritizing tasks and managing deadlines
+- **Tech-savvy learners** who want AI assistance for studying and task planning
+
+## Key Features
+
+Maxw AI offers a powerful set of features tailored for modern students:
+
+### AI-Powered Chat Assistant
+
+Interact with an intelligent AI assistant that understands your coursework and helps you:
+- Search the web for current information
+- Execute Python code for calculations and data analysis
+- Process and create documents (PowerPoint, Word, Excel, PDF)
+- Remember your preferences and important information across conversations
+- Search your Canvas course content semantically
+
+The AI assistant uses **Claude Sonnet 4.5** with native tool support, giving it access to:
+- **Code execution** for calculations and programmatic tool calling
+- **Web search** with location awareness
+- **Memory** to persist important facts about you
+- **Web fetch** to process external content
+
+### Educational Dashboard
+
+Manage all aspects of your academic life in one place:
+- View classes and upcoming assignments
+- Track todos with smart scheduling
+- Create and review study sets
+- Monitor your progress across courses
+
+### Smart Task Management
+
+Organize your assignments and todos with features including:
+- Multiple scheduling types: calendar, evening, anytime, someday
+- Direct linking to Canvas assignments
+- Subtask support for breaking down complex projects
+- Due date tracking with automatic reminders
+- Completion tracking and logbook
+
+### Study Tools
+
+Create and review study materials with:
+- AI-generated flashcards from course content
+- Term/definition cards for vocabulary and concepts
+- Question sets for active recall practice
+- Integration with Canvas course materials
+
+### Canvas LMS Integration
+
+Seamlessly connect your Canvas account to:
+- Import courses and assignments automatically
+- Search course content with semantic search powered by Upstash
+- Link todos to specific assignments
+- Access course materials without leaving Maxw AI
+
+### Cross-Platform Access
+
+Access Maxw AI from anywhere:
+- **Web app** built with Next.js 16 and React 19
+- **Mobile app** for iOS and Android using React Native with Expo
+- Synchronized data across all devices
+
+## Architecture Overview
+
+Maxw AI is built as a modern TypeScript monorepo using Turborepo:
+
+```
+maxw-ai-v3/
+├── apps/
+│   ├── web/         # Next.js web application
+│   │   ├── src/ai/  # AI agents, tools, and artifacts
+│   │   └── src/app/ # App Router pages and API routes
+│   └── native/      # React Native mobile app
+└── packages/        # Shared utilities
+```
+
+### Technology Stack
+
+Maxw AI leverages cutting-edge technologies:
+
+**Frontend**
+- Next.js 16 with App Router
+- React 19
+- TailwindCSS 4 with shadcn/ui components
+- React Native with Expo (mobile)
+
+**Backend & Database**
+- PostgreSQL with Neon serverless
+- Drizzle ORM for type-safe database access
+- Better-Auth for authentication
+- Upstash Search for Canvas content indexing
+
+**AI & Tools**
+- Anthropic Claude Sonnet 4.5 via AI SDK
+- Native Anthropic tools (code execution, web search, memory, web fetch)
+- Custom tools for Canvas, todos, and study sets
+- Container-based execution with skill persistence
+
+**State Management**
+- Zustand for client state
+- TanStack Query for server state
+- TanStack React Form with Zod validation
+
+**Development Tools**
+- Bun for package management and runtime
+- Biome for formatting and linting
+- TypeScript for type safety
+- Turborepo for monorepo orchestration
+
+## How It Works
+
+Maxw AI's core functionality centers around its AI chat interface (`apps/web/src/app/api/chat/route.ts:24-209`). When you send a message:
+
+1. The system builds an **AgentContext** with your user info, classes, timezone, and location
+2. A **ToolLoopAgent** is initialized with Claude Sonnet 4.5 and configured tools
+3. Your message is processed with access to native Anthropic tools and custom integrations
+4. The AI can programmatically call tools within Python code execution for efficiency
+5. Responses stream back in real-time with smooth word-by-word rendering
+
+The agent has access to comprehensive skills documentation for Canvas assignments, todo management, and LLM invocation patterns, enabling it to help you effectively manage your academic workload.
+
+## Getting Started
+
+Ready to dive in? Check out our [Quickstart Guide](/quickstart) to set up Maxw AI locally, or explore our [Installation Guide](/installation) for detailed setup instructions.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get Maxw AI running locally in minutes
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Detailed installation and configuration guide
+  </Card>
+  <Card title="AI Chat Features" icon="messages" href="/features/ai-chat">
+    Learn about the AI assistant capabilities
+  </Card>
+  <Card title="Canvas Integration" icon="graduation-cap" href="/integrations/canvas-lms">
+    Connect your Canvas LMS account
+  </Card>
+</CardGroup>

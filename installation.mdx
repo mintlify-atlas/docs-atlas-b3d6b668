@@ -1,0 +1,603 @@
+---
+title: "Installation Guide"
+description: "Complete installation and configuration guide for Maxw AI development and production environments"
+---
+
+This guide provides detailed instructions for installing and configuring Maxw AI for both development and production environments.
+
+## System Requirements
+
+Before installing Maxw AI, ensure your system meets these requirements:
+
+### Hardware Requirements
+
+- **RAM**: Minimum 4GB, recommended 8GB or more
+- **Storage**: At least 2GB free space for dependencies and database
+- **CPU**: Modern multi-core processor (development servers can be resource-intensive)
+
+### Software Requirements
+
+<CardGroup cols={2}>
+  <Card title="Operating System" icon="desktop">
+    - macOS 11 or later
+    - Linux (Ubuntu 20.04+, Debian 11+)
+    - Windows 10/11 with WSL2
+  </Card>
+  <Card title="Runtime & Database" icon="server">
+    - Bun 1.2.21 or later
+    - PostgreSQL 14 or later
+    - Node.js 18+ (for React Native)
+  </Card>
+</CardGroup>
+
+## Installing Bun Package Manager
+
+Maxw AI uses **Bun** as its package manager and runtime. Bun is significantly faster than npm or yarn and provides excellent TypeScript support.
+
+### macOS and Linux
+
+Install Bun using the official installer:
+
+```bash
+curl -fsSL https://bun.sh/install | bash
+```
+
+Restart your terminal, then verify the installation:
+
+```bash
+bun --version
+# Should output: 1.2.21 or later
+```
+
+### Windows
+
+Bun runs on Windows via WSL2 (Windows Subsystem for Linux):
+
+1. Install WSL2 following [Microsoft's guide](https://docs.microsoft.com/en-us/windows/wsl/install)
+2. Open your WSL2 terminal (Ubuntu recommended)
+3. Install Bun using the Linux instructions above
+
+<Note>
+  Bun is required for this project. npm, yarn, and pnpm are not supported.
+</Note>
+
+## Setting Up PostgreSQL
+
+Maxw AI requires a PostgreSQL database for storing user data, todos, study sets, and AI memory.
+
+### Option 1: Local PostgreSQL
+
+<CodeGroup>
+  ```bash macOS (Homebrew)
+  brew install postgresql@16
+  brew services start postgresql@16
+  
+  # Create database
+  createdb maxw_ai
+  ```
+
+  ```bash Ubuntu/Debian
+  sudo apt update
+  sudo apt install postgresql postgresql-contrib
+  sudo systemctl start postgresql
+  sudo systemctl enable postgresql
+  
+  # Create database and user
+  sudo -u postgres psql -c "CREATE DATABASE maxw_ai;"
+  sudo -u postgres psql -c "CREATE USER maxw_user WITH PASSWORD 'your_password';"
+  sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE maxw_ai TO maxw_user;"
+  ```
+
+  ```bash Docker
+  docker run --name maxw-postgres \
+    -e POSTGRES_DB=maxw_ai \
+    -e POSTGRES_USER=maxw_user \
+    -e POSTGRES_PASSWORD=your_password \
+    -p 5432:5432 \
+    -d postgres:16
+  ```
+</CodeGroup>
+
+### Option 2: Neon Serverless PostgreSQL (Recommended for Production)
+
+Maxw AI is optimized for [Neon](https://neon.tech), a serverless PostgreSQL provider:
+
+1. Sign up at [neon.tech](https://neon.tech)
+2. Create a new project
+3. Copy the connection string
+4. Use it as your `DATABASE_URL` environment variable
+
+<Note>
+  Neon offers a generous free tier and is recommended for production deployments on Vercel.
+</Note>
+
+### Verify PostgreSQL Connection
+
+Test your database connection:
+
+```bash
+psql "postgresql://user:password@localhost:5432/maxw_ai" -c "SELECT version();"
+```
+
+## Installing Project Dependencies
+
+### Clone the Repository
+
+Clone the Maxw AI repository:
+
+```bash
+git clone https://github.com/maxwiseman/maxw-ai-v3.git
+cd maxw-ai-v3
+```
+
+### Install Dependencies
+
+Install all dependencies for the monorepo:
+
+```bash
+bun install
+```
+
+This single command installs dependencies for:
+- Web application (`apps/web`)
+- Mobile application (`apps/native`)
+- Shared packages (if any)
+
+<Accordion title="What gets installed?">
+  The project uses Bun workspaces to manage the monorepo. Key dependencies include:
+  
+  **Web App**:
+  - Next.js 16 with React 19
+  - AI SDK with Anthropic integration
+  - Drizzle ORM and database tools
+  - TailwindCSS 4 and shadcn/ui
+  - Better-Auth for authentication
+  - Upstash Search for Canvas indexing
+  
+  **Mobile App**:
+  - React Native with Expo
+  - Shared UI components
+  - Better-Auth Expo integration
+  
+  **Development Tools**:
+  - Biome for linting and formatting
+  - Turborepo for build orchestration
+  - TypeScript for type checking
+</Accordion>
+
+## Environment Configuration
+
+### Create Environment File
+
+Create a `.env` file in the **repository root** (not in `apps/web/`):
+
+```bash
+touch .env
+```
+
+<Warning>
+  The environment file must be at the root of the repository. Drizzle ORM's configuration (`drizzle.config.ts`) reads from the root `.env` file.
+</Warning>
+
+### Required Environment Variables
+
+Add these variables to your `.env` file:
+
+```bash .env
+# ============================================
+# DATABASE
+# ============================================
+# PostgreSQL connection string (required)
+DATABASE_URL="postgresql://user:password@localhost:5432/maxw_ai"
+
+# ============================================
+# AUTHENTICATION
+# ============================================
+# Better-Auth secret (generate with: openssl rand -base64 32)
+AUTH_SECRET="your-generated-secret-here"
+
+# ============================================
+# UPSTASH SEARCH (Canvas Content Indexing)
+# ============================================
+# Upstash Search endpoint
+UPSTASH_SEARCH_URL="https://your-instance.upstash.io"
+# Upstash Search token (server-side)
+UPSTASH_SEARCH_TOKEN="your-token"
+# Upstash Search token (client-side)
+NEXT_PUBLIC_UPSTASH_SEARCH_TOKEN="your-public-token"
+
+# ============================================
+# AI API KEYS
+# ============================================
+# Anthropic API key (required for Claude Sonnet 4.5)
+ANTHROPIC_API_KEY="sk-ant-api03-..."
+
+# OpenAI API key (required for embeddings)
+OPENAI_API_KEY="sk-..."
+
+# Google Generative AI API key (optional)
+GOOGLE_GENERATIVE_AI_API_KEY="..."
+```
+
+### Optional: Mobile App Environment
+
+For mobile development, create `apps/native/.env`:
+
+```bash apps/native/.env
+# Server URL (points to your local dev server)
+EXPO_PUBLIC_SERVER_URL="http://localhost:3000"
+```
+
+### Optional: Web App Environment
+
+For web-specific configuration, create `apps/web/.env`:
+
+```bash apps/web/.env
+# Public server URL (for production)
+NEXT_PUBLIC_SERVER_URL="https://your-domain.com"
+```
+
+### Environment Variable Reference
+
+Here's a complete reference of all environment variables:
+
+<AccordionGroup>
+  <Accordion title="DATABASE_URL" icon="database">
+    PostgreSQL connection string in the format:
+    ```
+    postgresql://[user]:[password]@[host]:[port]/[database]
+    ```
+    
+    Example with Neon:
+    ```
+    postgresql://user:pass@ep-cool-name-123456.us-east-2.aws.neon.tech/maxw_ai?sslmode=require
+    ```
+  </Accordion>
+
+  <Accordion title="AUTH_SECRET" icon="key">
+    Secret key for Better-Auth session encryption. Generate with:
+    ```bash
+    openssl rand -base64 32
+    ```
+    
+    Must be at least 32 characters long and kept secure.
+  </Accordion>
+
+  <Accordion title="UPSTASH_SEARCH_*" icon="magnifying-glass">
+    Upstash Search credentials for indexing Canvas LMS content:
+    
+    - `UPSTASH_SEARCH_URL`: Your Upstash Search endpoint
+    - `UPSTASH_SEARCH_TOKEN`: Server-side token (full access)
+    - `NEXT_PUBLIC_UPSTASH_SEARCH_TOKEN`: Client-side token (read-only)
+    
+    Sign up at [upstash.com](https://upstash.com) and create a Search index.
+  </Accordion>
+
+  <Accordion title="ANTHROPIC_API_KEY" icon="robot">
+    Anthropic API key for Claude Sonnet 4.5. Required for the AI chat feature.
+    
+    Get your API key from [console.anthropic.com](https://console.anthropic.com).
+    
+    Format: `sk-ant-api03-...`
+  </Accordion>
+
+  <Accordion title="OPENAI_API_KEY" icon="brain">
+    OpenAI API key used for generating embeddings when indexing Canvas content.
+    
+    Get your API key from [platform.openai.com](https://platform.openai.com).
+    
+    Format: `sk-...`
+  </Accordion>
+
+  <Accordion title="GOOGLE_GENERATIVE_AI_API_KEY" icon="google">
+    Optional Google AI API key for additional AI features.
+    
+    Get from [ai.google.dev](https://ai.google.dev).
+  </Accordion>
+</AccordionGroup>
+
+## Database Initialization
+
+After configuring your environment variables, initialize the database:
+
+### Push Schema to Database
+
+Push the Drizzle schema to your PostgreSQL database:
+
+```bash
+bun db:push
+```
+
+This command:
+1. Reads your `DATABASE_URL` from the root `.env` file
+2. Connects to PostgreSQL
+3. Creates all tables defined in `apps/web/src/db/schema/`:
+   - `user` - User accounts
+   - `session` - Authentication sessions
+   - `account` - OAuth provider credentials
+   - `verification` - Email verification tokens
+   - `todo` - Task items with Canvas linking
+   - `studySet` and `studySetItem` - Study materials
+   - `memory` - AI persistent memory
+
+<Note>
+  For development, use `bun db:push`. For production, use migrations with `bun db:migrate`.
+</Note>
+
+### Generate Migration Files (Optional)
+
+If you need to create migration files for version control:
+
+```bash
+bun db:generate
+```
+
+This generates SQL migration files in `apps/web/src/db/migrations/`.
+
+### View Database with Drizzle Studio
+
+Explore your database visually:
+
+```bash
+bun db:studio
+```
+
+This opens Drizzle Studio at `http://localhost:4983` where you can:
+- View all tables and relationships
+- Browse and edit data
+- Run SQL queries
+- Inspect schema structure
+
+## Development Setup
+
+### Start Development Servers
+
+Start all applications in development mode:
+
+<CodeGroup>
+  ```bash All Apps
+  bun dev
+  ```
+
+  ```bash Web Only
+  bun dev:web
+  ```
+
+  ```bash Mobile Only
+  bun dev:native
+  ```
+</CodeGroup>
+
+### Development Server Details
+
+**Web App** (`bun dev:web`):
+- Runs on `http://localhost:3000`
+- Uses Next.js 16 with Turbopack for fast refresh
+- API routes available at `/api/*`
+- Hot module replacement enabled
+
+**Mobile App** (`bun dev:native`):
+- Starts Expo development server
+- Accessible via Expo Go app (scan QR code)
+- iOS simulator: Press `i`
+- Android emulator: Press `a`
+
+### Code Quality Tools
+
+Run Biome for formatting and linting:
+
+```bash
+bun check
+```
+
+This automatically:
+- Formats all code with Biome's rules (double quotes, spaces)
+- Sorts imports and Tailwind classes
+- Fixes auto-fixable issues
+- Reports remaining errors
+
+<Note>
+  This project uses **Biome**, not ESLint or Prettier. Biome is configured for double quotes and space indentation.
+</Note>
+
+## Production Setup
+
+### Build for Production
+
+Build all applications:
+
+<CodeGroup>
+  ```bash All Apps
+  bun build
+  ```
+
+  ```bash Web Only
+  bun build:web
+  ```
+
+  ```bash Mobile Only
+  bun build:native
+  ```
+</CodeGroup>
+
+### Production Environment Variables
+
+For production deployments, add these additional variables:
+
+```bash .env.production
+# Production database (use connection pooling)
+DATABASE_URL="postgresql://..."
+
+# Production server URL
+NEXT_PUBLIC_SERVER_URL="https://your-domain.com"
+
+# Vercel-specific (if deploying to Vercel)
+VERCEL_URL="your-app.vercel.app"
+```
+
+### Database Migrations for Production
+
+For production, use migrations instead of `db:push`:
+
+1. Generate migration files:
+   ```bash
+   bun db:generate
+   ```
+
+2. Review generated SQL in `apps/web/src/db/migrations/`
+
+3. Run migrations:
+   ```bash
+   bun db:migrate
+   ```
+
+### Deployment Recommendations
+
+<CardGroup cols={2}>
+  <Card title="Vercel" icon="triangle">
+    **Recommended for Web App**
+    
+    - Zero-config deployment
+    - Automatic preview URLs
+    - Built-in analytics
+    - Edge function support
+  </Card>
+  <Card title="Expo EAS" icon="mobile">
+    **Recommended for Mobile App**
+    
+    - Build iOS and Android apps
+    - Over-the-air updates
+    - Submission to app stores
+    - Integrated with Expo ecosystem
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Bun installation fails">
+    If Bun installation fails:
+    
+    **macOS/Linux**:
+    - Ensure you have `curl` installed: `which curl`
+    - Try manual installation from [bun.sh/install](https://bun.sh/install)
+    - Check system requirements: 64-bit system required
+    
+    **Windows**:
+    - Ensure WSL2 is properly installed and updated
+    - Run `wsl --update` to get latest WSL version
+    - Install Bun inside WSL, not in Windows directly
+  </Accordion>
+
+  <Accordion title="PostgreSQL connection refused">
+    If you can't connect to PostgreSQL:
+    
+    1. Check if PostgreSQL is running:
+       ```bash
+       pg_isready
+       ```
+    
+    2. Verify the port (usually 5432):
+       ```bash
+       sudo lsof -i :5432
+       ```
+    
+    3. Check `pg_hba.conf` for connection permissions
+    
+    4. For Docker, ensure container is running:
+       ```bash
+       docker ps | grep postgres
+       ```
+  </Accordion>
+
+  <Accordion title="Database schema push fails">
+    If `bun db:push` fails:
+    
+    1. Verify your `DATABASE_URL` in root `.env` (not `apps/web/.env`)
+    2. Check PostgreSQL version: `psql --version` (need 14+)
+    3. Ensure database exists: `createdb maxw_ai`
+    4. Check database permissions
+    5. Review error message for specific table/column issues
+  </Accordion>
+
+  <Accordion title="Module not found errors">
+    If you see module resolution errors:
+    
+    1. Clear Bun cache:
+       ```bash
+       rm -rf node_modules
+       bun install
+       ```
+    
+    2. Clear Next.js cache:
+       ```bash
+       rm -rf apps/web/.next
+       ```
+    
+    3. Ensure you're using Bun, not npm:
+       ```bash
+       which bun
+       bun --version
+       ```
+  </Accordion>
+
+  <Accordion title="TypeScript errors in IDE">
+    If you see TypeScript errors in your IDE:
+    
+    1. Ensure TypeScript extension is installed
+    2. Reload IDE window
+    3. Check TypeScript version:
+       ```bash
+       bun check-types
+       ```
+    4. Verify workspace is opened at repo root, not subdirectory
+  </Accordion>
+
+  <Accordion title="Anthropic API errors">
+    If AI chat fails with API errors:
+    
+    1. Verify your `ANTHROPIC_API_KEY` is correct
+    2. Check API key has not expired
+    3. Ensure you have API credits: [console.anthropic.com](https://console.anthropic.com)
+    4. Check browser console (F12) for detailed error messages
+    5. Review server logs for API response details
+  </Accordion>
+
+  <Accordion title="Expo mobile app won't connect">
+    If mobile app can't connect to server:
+    
+    1. Ensure web server is running: `bun dev:web`
+    2. Check `EXPO_PUBLIC_SERVER_URL` in `apps/native/.env`
+    3. Use your computer's local IP, not `localhost`:
+       ```bash
+       # macOS/Linux
+       ifconfig | grep "inet "
+       # Use: http://192.168.1.x:3000
+       ```
+    4. Ensure mobile device is on same WiFi network
+    5. Check firewall isn't blocking port 3000
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+Your installation is complete! Here's what to do next:
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+    Follow the quickstart to create your first account and chat
+  </Card>
+  <Card title="AI Features" icon="brain" href="/features/ai-chat">
+    Learn about the AI assistant capabilities
+  </Card>
+  <Card title="Canvas Integration" icon="graduation-cap" href="/integrations/canvas-lms">
+    Connect your Canvas LMS account
+  </Card>
+  <Card title="Development Guide" icon="code" href="/development">
+    Learn about the codebase architecture
+  </Card>
+</CardGroup>
+
+<Note>
+  For questions or issues, check the GitHub repository's issues page or join the community discussions.
+</Note>

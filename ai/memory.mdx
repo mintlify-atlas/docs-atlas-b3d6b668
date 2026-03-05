@@ -1,0 +1,494 @@
+---
+title: "Memory System"
+description: "Persistent user memory with filesystem-like interface for storing preferences, facts, and context"
+---
+
+## Overview
+
+The memory system provides persistent storage for user information using Anthropic's native `memory` tool. It implements a **filesystem-like interface** where the agent can create, view, edit, and delete virtual files in a `/memories` directory.
+
+## Architecture
+
+### Database Schema
+
+```typescript
+// apps/web/src/db/schema/memory.ts
+export const memory = pgTable("memory", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  path: text("path").notNull(),  // e.g., /memories/notes.txt
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+```
+
+### Tool Configuration
+
+```typescript
+// apps/web/src/ai/agents/general.ts
+memory: anthropic.tools.memory_20250818({
+  execute: async (action) => {
+    return await executeMemoryCommand(ctx.userId, action);
+  },
+})
+```
+
+## Memory Commands
+
+All memory operations are performed through a single `memory` tool with different commands.
+
+### VIEW
+
+View directory contents or file contents.
+
+<ParamField path="command" type="string" required>
+  `"view"`
+</ParamField>
+
+<ParamField path="path" type="string" required>
+  Path to file or directory (must start with `/memories`)
+</ParamField>
+
+<ParamField path="view_range" type="[number, number]">
+  Optional line range for viewing files: `[startLine, endLine]`
+</ParamField>
+
+**Examples**:
+
+<CodeGroup>
+
+```json View Directory
+{
+  "command": "view",
+  "path": "/memories"
+}
+```
+
+```json View File
+{
+  "command": "view",
+  "path": "/memories/preferences.txt"
+}
+```
+
+```json View File Range
+{
+  "command": "view",
+  "path": "/memories/notes.txt",
+  "view_range": [1, 50]
+}
+```
+
+</CodeGroup>
+
+**Returns**:
+- For directories: File listing with sizes up to 2 levels deep
+- For files: Content with line numbers (6 chars, right-aligned, space-padded)
+
+### CREATE
+
+Create a new file.
+
+<ParamField path="command" type="string" required>
+  `"create"`
+</ParamField>
+
+<ParamField path="path" type="string" required>
+  Path for new file (must start with `/memories`)
+</ParamField>
+
+<ParamField path="file_text" type="string" required>
+  Content of the new file
+</ParamField>
+
+**Example**:
+```json
+{
+  "command": "create",
+  "path": "/memories/preferences.txt",
+  "file_text": "Favorite subject: Mathematics\nPreferred study time: Evening\nLearning style: Visual"
+}
+```
+
+**Returns**: Success message or error if file already exists
+
+### STR_REPLACE
+
+Replace text in a file.
+
+<ParamField path="command" type="string" required>
+  `"str_replace"`
+</ParamField>
+
+<ParamField path="path" type="string" required>
+  Path to file
+</ParamField>
+
+<ParamField path="old_str" type="string" required>
+  Exact string to find (must be unique in file)
+</ParamField>
+
+<ParamField path="new_str" type="string" required>
+  Replacement string
+</ParamField>
+
+**Example**:
+```json
+{
+  "command": "str_replace",
+  "path": "/memories/preferences.txt",
+  "old_str": "Preferred study time: Evening",
+  "new_str": "Preferred study time: Morning"
+}
+```
+
+**Returns**:
+- Success: Snippet of edited content with line numbers
+- Error: If `old_str` not found or appears multiple times
+
+### INSERT
+
+Insert text at a specific line.
+
+<ParamField path="command" type="string" required>
+  `"insert"`
+</ParamField>
+
+<ParamField path="path" type="string" required>
+  Path to file
+</ParamField>
+
+<ParamField path="insert_line" type="number" required>
+  Line number to insert at (0-based)
+</ParamField>
+
+<ParamField path="insert_text" type="string" required>
+  Text to insert
+</ParamField>
+
+**Example**:
+```json
+{
+  "command": "insert",
+  "path": "/memories/preferences.txt",
+  "insert_line": 3,
+  "insert_text": "Goals: Improve calculus grade to A"
+}
+```
+
+### DELETE
+
+Delete a file or directory.
+
+<ParamField path="command" type="string" required>
+  `"delete"`
+</ParamField>
+
+<ParamField path="path" type="string" required>
+  Path to file or directory
+</ParamField>
+
+**Example**:
+```json
+{
+  "command": "delete",
+  "path": "/memories/old-notes.txt"
+}
+```
+
+**Note**: Deleting a directory removes all contents recursively.
+
+### RENAME
+
+Rename or move a file/directory.
+
+<ParamField path="command" type="string" required>
+  `"rename"`
+</ParamField>
+
+<ParamField path="old_path" type="string" required>
+  Current path
+</ParamField>
+
+<ParamField path="new_path" type="string" required>
+  New path (must not already exist)
+</ParamField>
+
+**Example**:
+```json
+{
+  "command": "rename",
+  "old_path": "/memories/draft.txt",
+  "new_path": "/memories/final.txt"
+}
+```
+
+## Implementation Details
+
+### Path Validation
+
+All paths must:
+- Start with `/memories`
+- Not contain directory traversal patterns (`../`, `..\\`, `%2e%2e`)
+
+```typescript
+function validatePath(path: string): void {
+  if (!path.startsWith("/memories")) {
+    throw new Error("All memory paths must start with /memories");
+  }
+
+  if (path.includes("../") || path.includes("..\\") || path.includes("%2e%2e")) {
+    throw new Error("Invalid path: directory traversal detected");
+  }
+}
+```
+
+### File vs Directory Detection
+
+```typescript
+function isFilePath(path: string): boolean {
+  const parts = path.split("/");
+  const lastPart = parts[parts.length - 1];
+  return lastPart.includes(".");
+}
+```
+
+### Size Formatting
+
+```typescript
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}K`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
+}
+```
+
+## Usage Patterns
+
+### Storing User Preferences
+
+<CodeGroup>
+
+```typescript Initial Setup
+// Agent learns preferences and creates memory file
+{
+  "command": "create",
+  "path": "/memories/preferences.txt",
+  "file_text": `User Preferences
+================
+
+Favorite subjects: Mathematics, Physics
+Preferred study time: Evening (7-9 PM)
+Learning style: Visual learner, prefers diagrams
+Weakness areas: Organic chemistry, essay writing
+Strengths: Problem-solving, analytical thinking
+
+Goals for this semester:
+- Raise calculus grade from B+ to A
+- Complete physics project early
+- Improve writing skills
+`
+}
+```
+
+```typescript Checking Memory
+// Before asking about preferences, agent checks memory
+{
+  "command": "view",
+  "path": "/memories/preferences.txt"
+}
+// Returns content, agent uses it without asking user again
+```
+
+```typescript Updating Preferences
+// User shares new information
+{
+  "command": "str_replace",
+  "path": "/memories/preferences.txt",
+  "old_str": "Raise calculus grade from B+ to A",
+  "new_str": "Raise calculus grade from B+ to A (Currently at A-!)"
+}
+```
+
+</CodeGroup>
+
+### Organizing by Category
+
+```
+/memories/
+  preferences.txt
+  academic/
+    calculus-notes.txt
+    physics-formulas.txt
+  personal/
+    interests.txt
+    schedule.txt
+  canvas/
+    class-nicknames.txt
+```
+
+### Storing Important Facts
+
+```text
+/memories/facts.txt
+
+Important Facts About User
+==========================
+
+Name: Alex Johnson
+School: Boston University
+Major: Computer Science (sophomore)
+
+Canvas Preferences:
+- Calls "MATH 225 - Calculus II" -> "Calc"
+- Calls "CS 112 - Data Structures" -> "DS"
+- Calls "PHYS 201 - Physics I" -> "Physics"
+
+Study Habits:
+- Studies best with music
+- Takes breaks every 45 minutes
+- Prefers evening study sessions
+
+Known Issues:
+- Canvas API sometimes slow for Physics class
+- Prefers not to schedule todos before 9am
+```
+
+## System Prompt Guidance
+
+From `buildSystemPrompt()`:
+
+```
+10. **memory**: Store and retrieve important information about the user
+    - Use to remember user preferences, facts, goals, etc.
+    - Check memory before asking users to repeat information
+    - Proactively save important facts the user shares
+```
+
+Behavioral notes:
+```
+- **Use memory to avoid asking redundant questions** - check stored memory before asking for more information
+- **Proactively save important facts** about the user to memory
+```
+
+## Implementation Reference
+
+<Accordion title="Full Memory Command Executor">
+```typescript
+// apps/web/src/ai/utils/memory-helpers.ts
+export async function executeMemoryCommand(
+  userId: string,
+  action: any,
+): Promise<string> {
+  try {
+    switch (action.command) {
+      case "view":
+        return await viewMemory(userId, action.path, action.view_range);
+      case "create":
+        return await createMemory(userId, action.path, action.file_text);
+      case "str_replace":
+        return await replaceInMemory(
+          userId,
+          action.path,
+          action.old_str,
+          action.new_str,
+        );
+      case "insert":
+        return await insertInMemory(
+          userId,
+          action.path,
+          action.insert_line,
+          action.insert_text,
+        );
+      case "delete":
+        return await deleteMemory(userId, action.path);
+      case "rename":
+        return await renameMemory(userId, action.old_path, action.new_path);
+      default:
+        return `Error: Unknown command ${action.command}`;
+    }
+  } catch (error) {
+    console.error("Memory tool error:", error);
+    return `Error: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+```
+</Accordion>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Check Before Asking">
+    Always view memory files before asking the user to repeat information:
+    
+    ```python
+    # Agent should do this before asking about preferences
+    result = memory({"command": "view", "path": "/memories/preferences.txt"})
+    if "does not exist" not in result:
+        # Use existing preferences
+        preferences = result
+    else:
+        # Ask user for preferences and save them
+    ```
+  </Accordion>
+
+  <Accordion title="Proactive Saving">
+    When users share important information, save it immediately:
+    
+    ```
+    User: "I prefer studying in the evening, usually around 7pm"
+    
+    Agent: [Saves to memory]
+    {
+      "command": "create",
+      "path": "/memories/preferences.txt",
+      "file_text": "Preferred study time: Evening (around 7pm)\n"
+    }
+    
+    [Then responds] "Got it! I'll remember that you prefer evening study sessions around 7pm."
+    ```
+  </Accordion>
+
+  <Accordion title="Organize Hierarchically">
+    Use subdirectories for better organization:
+    
+    - `/memories/preferences.txt` - Core user preferences
+    - `/memories/academic/` - Academic-related notes
+    - `/memories/personal/` - Personal facts and interests
+    - `/memories/canvas/` - Canvas-specific customizations
+  </Accordion>
+
+  <Accordion title="Keep Files Focused">
+    Create separate files for different categories rather than one large file:
+    
+    ✅ Good:
+    - `/memories/study-preferences.txt`
+    - `/memories/course-nicknames.txt`
+    - `/memories/academic-goals.txt`
+    
+    ❌ Avoid:
+    - `/memories/everything.txt` (too broad)
+  </Accordion>
+</AccordionGroup>
+
+## Persistence Across Conversations
+
+Memory persists indefinitely across all conversations for a user:
+
+1. **Conversation 1**: User shares preferences → Agent saves to `/memories/preferences.txt`
+2. **Conversation 2** (next day): Agent reads `/memories/preferences.txt` → Uses preferences without asking
+3. **Conversation 3** (next week): User updates preferences → Agent updates file with `str_replace`
+
+This enables truly personalized, context-aware assistance that improves over time.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="General Agent" href="/ai/general-agent" icon="robot">
+    Learn how memory is used in the system prompt
+  </Card>
+  <Card title="Available Tools" href="/ai/tools" icon="wrench">
+    Explore other AI tools and capabilities
+  </Card>
+</CardGroup>

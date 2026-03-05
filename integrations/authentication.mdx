@@ -1,0 +1,515 @@
+---
+title: Authentication
+description: Understand how Maxw AI implements user authentication, session management, and security using Better-Auth.
+---
+
+Maxw AI uses **Better-Auth** for comprehensive authentication management, providing secure user sessions, email/password authentication, and extensibility for OAuth providers.
+
+## Overview
+
+The authentication system handles:
+
+- User account creation and management
+- Email and password authentication
+- Session management with secure cookies
+- Email verification
+- Cross-platform support (web + mobile via Expo)
+- Integration with PostgreSQL via Drizzle ORM
+
+## Better-Auth Configuration
+
+**Implementation:** `/home/daytona/workspace/source/apps/web/src/lib/auth.ts:8`
+
+```typescript
+import { expo } from "@better-auth/expo";
+import { betterAuth } from "better-auth";
+import { drizzleAdapter } from "better-auth/adapters/drizzle";
+
+export const auth = betterAuth({
+  database: drizzleAdapter(db, {
+    provider: "pg",
+    schema: schema,
+  }),
+  secret: env.AUTH_SECRET,
+  trustedOrigins: ["exp://"],
+  emailAndPassword: {
+    enabled: true,
+  },
+  advanced: {
+    defaultCookieAttributes: {
+      sameSite: "none",
+      secure: true,
+      httpOnly: true,
+    },
+  },
+  user: {
+    additionalFields: {
+      settings: {
+        type: "json",
+        required: true,
+        input: false,
+        defaultValue: "",
+      },
+    },
+  },
+  plugins: [expo()],
+});
+```
+
+### Key Configuration Options
+
+<Accordion title="Database Adapter">
+  Better-Auth uses the Drizzle adapter to connect to PostgreSQL:
+  
+  ```typescript
+  database: drizzleAdapter(db, {
+    provider: "pg",
+    schema: schema,
+  })
+  ```
+  
+  This automatically handles all database operations for authentication, including user creation, session management, and verification tokens.
+</Accordion>
+
+<Accordion title="Trusted Origins">
+  Expo mobile app support requires `exp://` in trusted origins:
+  
+  ```typescript
+  trustedOrigins: ["exp://"]
+  ```
+  
+  This allows the React Native app to authenticate against the same backend.
+</Accordion>
+
+<Accordion title="Cookie Settings">
+  Production-ready cookie configuration:
+  
+  ```typescript
+  defaultCookieAttributes: {
+    sameSite: "none",  // Required for cross-origin requests
+    secure: true,       // HTTPS only
+    httpOnly: true,     // Prevents XSS attacks
+  }
+  ```
+  
+  <Warning>
+  These settings require HTTPS in production. For local development, Better-Auth automatically relaxes these constraints.
+  </Warning>
+</Accordion>
+
+<Accordion title="Additional User Fields">
+  The `settings` field is added as a custom user field:
+  
+  ```typescript
+  user: {
+    additionalFields: {
+      settings: {
+        type: "json",
+        required: true,
+        input: false,      // Not provided during signup
+        defaultValue: "",  // Empty object by default
+      },
+    },
+  }
+  ```
+  
+  This allows storing Canvas credentials and other user-specific configuration.
+</Accordion>
+
+## Database Schema
+
+**Implementation:** `/home/daytona/workspace/source/apps/web/src/db/schema/auth.ts:4`
+
+The authentication system uses four database tables:
+
+### User Table
+
+```typescript
+export const user = pgTable("user", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  emailVerified: boolean("email_verified").default(false).notNull(),
+  image: text("image"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+  settings: jsonb("settings").$type<UserSettings>().default({}).notNull(),
+});
+```
+
+**Key Fields:**
+- `id`: Primary key (text-based UUID)
+- `email`: Unique identifier for login
+- `emailVerified`: Whether the email has been verified
+- `settings`: JSONB column for flexible user configuration (Canvas credentials, preferences, etc.)
+
+### Session Table
+
+```typescript
+export const session = pgTable("session", {
+  id: text("id").primaryKey(),
+  expiresAt: timestamp("expires_at").notNull(),
+  token: text("token").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .$onUpdate(() => new Date())
+    .notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+});
+```
+
+**Security Features:**
+- Unique session tokens for each login
+- IP address and user agent tracking
+- Automatic expiration timestamps
+- Cascade delete when user is removed
+
+<Note>
+Sessions are automatically cleaned up when they expire or when the user logs out.
+</Note>
+
+### Account Table
+
+```typescript
+export const account = pgTable("account", {
+  id: text("id").primaryKey(),
+  accountId: text("account_id").notNull(),
+  providerId: text("provider_id").notNull(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  idToken: text("id_token"),
+  accessTokenExpiresAt: timestamp("access_token_expires_at"),
+  refreshTokenExpiresAt: timestamp("refresh_token_expires_at"),
+  scope: text("scope"),
+  password: text("password"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+```
+
+**Purpose:**
+- Links users to authentication providers
+- Stores OAuth tokens for providers like Google, GitHub, etc.
+- Stores hashed passwords for email/password authentication
+- Supports multiple authentication methods per user
+
+### Verification Table
+
+```typescript
+export const verification = pgTable("verification", {
+  id: text("id").primaryKey(),
+  identifier: text("identifier").notNull(),
+  value: text("value").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+```
+
+**Use Cases:**
+- Email verification tokens
+- Password reset tokens
+- Magic link authentication
+- Automatic expiration of tokens
+
+## User Authentication Flow
+
+Maxw AI implements a standard authentication flow with Better-Auth:
+
+<Steps>
+  <Step title="User Registration">
+    User provides email and password. Better-Auth hashes the password and creates:
+    - User record in `user` table
+    - Account record in `account` table with hashed password
+    - Verification token in `verification` table
+  </Step>
+  
+  <Step title="Email Verification">
+    A verification email is sent with a unique token. When the user clicks the link:
+    - Token is validated against `verification` table
+    - `emailVerified` is set to `true` in `user` table
+    - Verification token is deleted
+  </Step>
+  
+  <Step title="User Login">
+    User submits email and password:
+    - Better-Auth looks up the user by email
+    - Password is verified against the hashed version
+    - A new session is created in `session` table
+    - Session token is stored in a secure HTTP-only cookie
+  </Step>
+  
+  <Step title="Session Management">
+    On each request:
+    - Session token is extracted from the cookie
+    - Token is validated against `session` table
+    - User data is retrieved and attached to the request
+    - Session expiration is checked
+  </Step>
+  
+  <Step title="Logout">
+    When user logs out:
+    - Session is deleted from `session` table
+    - Cookie is cleared from the browser
+  </Step>
+</Steps>
+
+## Session Management
+
+Sessions are managed using Better-Auth's built-in session handling:
+
+### Getting Current Session
+
+```typescript
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
+
+const session = await auth.api.getSession({ 
+  headers: await headers() 
+});
+
+if (!session) {
+  // User is not authenticated
+  return "Unauthorized";
+}
+
+// Access user data
+console.log(session.user.id);
+console.log(session.user.email);
+console.log(session.user.name);
+```
+
+### Session Properties
+
+```typescript
+interface Session {
+  session: {
+    id: string;
+    expiresAt: Date;
+    token: string;
+    ipAddress?: string;
+    userAgent?: string;
+  };
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    emailVerified: boolean;
+    image?: string;
+    settings: UserSettings;
+  };
+}
+```
+
+<Note>
+Better-Auth automatically handles session renewal and expiration. Sessions are extended on each request, providing a smooth user experience.
+</Note>
+
+## API Endpoints
+
+Better-Auth automatically creates API endpoints at `/api/auth/*`:
+
+- `POST /api/auth/sign-up/email` - Register with email/password
+- `POST /api/auth/sign-in/email` - Login with email/password
+- `POST /api/auth/sign-out` - Logout
+- `GET /api/auth/session` - Get current session
+- `POST /api/auth/verify-email` - Verify email address
+- `POST /api/auth/forgot-password` - Request password reset
+- `POST /api/auth/reset-password` - Reset password with token
+
+**Implementation:** These endpoints are automatically registered by Better-Auth and don't require manual route creation.
+
+## OAuth Providers
+
+While the current configuration only enables email/password authentication, Better-Auth supports OAuth providers:
+
+### Adding OAuth Providers
+
+```typescript
+import { google, github } from "@better-auth/oauth";
+
+export const auth = betterAuth({
+  // ... other config
+  socialProviders: {
+    google: {
+      clientId: env.GOOGLE_CLIENT_ID,
+      clientSecret: env.GOOGLE_CLIENT_SECRET,
+    },
+    github: {
+      clientId: env.GITHUB_CLIENT_ID,
+      clientSecret: env.GITHUB_CLIENT_SECRET,
+    },
+  },
+});
+```
+
+<Warning>
+OAuth provider configuration requires additional environment variables and callback URL setup. Refer to Better-Auth documentation for specific provider requirements.
+</Warning>
+
+## Security Features
+
+### Password Security
+
+- Passwords are hashed using **bcrypt** before storage
+- Password reset uses time-limited tokens
+- Failed login attempts are tracked (if configured)
+
+### Session Security
+
+- HTTP-only cookies prevent XSS attacks
+- Secure flag ensures HTTPS-only transmission
+- SameSite=none allows cross-origin requests while maintaining security
+- IP address and user agent tracking for anomaly detection
+
+### Token Security
+
+- Verification tokens are single-use
+- All tokens have expiration timestamps
+- Tokens are cryptographically random
+
+### Database Security
+
+- All foreign keys use `onDelete: "cascade"` for referential integrity
+- Automatic timestamp updates prevent stale data
+- Email uniqueness constraint prevents duplicate accounts
+
+## Environment Variables
+
+**Required:**
+
+```bash
+AUTH_SECRET=your-random-secret-at-least-32-chars
+DATABASE_URL=postgresql://user:password@host:port/database
+```
+
+**Optional (for OAuth):**
+
+```bash
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GITHUB_CLIENT_ID=your-github-client-id
+GITHUB_CLIENT_SECRET=your-github-client-secret
+```
+
+<Warning>
+The `AUTH_SECRET` should be a cryptographically random string of at least 32 characters. Use `openssl rand -base64 32` to generate one.
+</Warning>
+
+## Email Verification
+
+Email verification is enabled by default with Better-Auth:
+
+1. User signs up with email and password
+2. `emailVerified` is set to `false`
+3. Verification email is sent (requires email configuration)
+4. User clicks verification link
+5. `emailVerified` is updated to `true`
+
+### Email Configuration
+
+To enable email sending, configure an email provider in Better-Auth:
+
+```typescript
+import { sendEmail } from "@better-auth/email";
+
+export const auth = betterAuth({
+  // ... other config
+  email: {
+    sendEmail: async ({ email, subject, html }) => {
+      // Use your email provider (SendGrid, Resend, etc.)
+      await yourEmailProvider.send({
+        to: email,
+        subject: subject,
+        html: html,
+      });
+    },
+  },
+});
+```
+
+## Cross-Platform Support
+
+The Expo plugin enables authentication in the React Native mobile app:
+
+```typescript
+import { expo } from "@better-auth/expo";
+
+export const auth = betterAuth({
+  plugins: [expo()],
+  trustedOrigins: ["exp://"],
+});
+```
+
+This allows:
+- Shared authentication backend for web and mobile
+- Deep linking for email verification and password reset
+- Secure token storage using platform-specific secure storage
+
+## Error Handling
+
+Common authentication errors:
+
+```typescript
+try {
+  const session = await auth.api.getSession({ headers: await headers() });
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+  
+  // Proceed with authenticated request
+} catch (error) {
+  if (error.message === "Not authenticated") {
+    // Redirect to login
+  } else {
+    // Handle other errors
+  }
+}
+```
+
+### Common Error Cases
+
+- **Invalid credentials**: Wrong email or password
+- **Email already exists**: Duplicate registration attempt
+- **Session expired**: User needs to log in again
+- **Invalid token**: Verification or reset token is invalid or expired
+- **Email not verified**: Some actions may require verified email
+
+## Best Practices
+
+1. **Always validate sessions**: Check for valid session before accessing protected resources
+
+2. **Use environment variables**: Never hardcode secrets in your application code
+
+3. **Implement rate limiting**: Protect login endpoints from brute-force attacks
+
+4. **Log authentication events**: Track successful and failed login attempts for security monitoring
+
+5. **Secure cookie settings**: Always use `secure`, `httpOnly`, and appropriate `sameSite` settings in production
+
+6. **Regular token cleanup**: Periodically clean up expired tokens and sessions from the database
+
+7. **Multi-factor authentication**: Consider adding 2FA for enhanced security (Better-Auth supports this)
+
+## Related Resources
+
+- **Better-Auth Documentation**: [https://better-auth.com](https://better-auth.com)
+- **Drizzle ORM**: [https://orm.drizzle.team](https://orm.drizzle.team)
+- **Database Migrations**: Use `bun db:generate` and `bun db:migrate` for schema changes
+- **Session Management**: Sessions are automatically managed by Better-Auth middleware

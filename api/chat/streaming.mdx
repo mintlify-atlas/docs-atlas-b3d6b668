@@ -1,0 +1,397 @@
+---
+title: "Streaming Chat API"
+description: "Real-time AI chat endpoint with tool execution, extended thinking, and streaming responses"
+---
+
+## Overview
+
+The `/api/chat` endpoint powers Maxw AI's core conversational experience. It uses **Anthropic Claude Sonnet 4.5** with native tool support, streaming responses, and extended thinking capabilities for complex reasoning tasks.
+
+<Info>
+  This endpoint returns streaming responses using the AI SDK's `UIMessageStream` format. Responses include text chunks, tool calls, and thinking blocks in real-time.
+</Info>
+
+## Endpoint
+
+```
+POST /api/chat
+```
+
+## Authentication
+
+Requires a valid user session via Better-Auth. The endpoint extracts user context from session headers.
+
+```typescript
+const authData = await auth.api.getSession({ headers: await headers() });
+if (!authData?.user) {
+  return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+}
+```
+
+## Request Body
+
+<ParamField body="messages" type="UIMessage[]" required>
+  Array of conversation messages. Each message follows the AI SDK `UIMessage` format with `role` ("user" | "assistant" | "system") and `content` (string or multi-part content).
+  
+  ```typescript
+  interface UIMessage {
+    role: "user" | "assistant" | "system";
+    content: string | Array<TextPart | ImagePart | ToolCallPart>;
+    experimental_providerMetadata?: {
+      anthropic?: {
+        containerId?: string; // For container persistence
+      };
+    };
+  }
+  ```
+</ParamField>
+
+<ParamField body="id" type="string" required>
+  Unique chat session identifier (chatId). Used for context persistence and associating messages with a conversation.
+</ParamField>
+
+<ParamField body="trigger" type="string">
+  Optional trigger type for the chat interaction (e.g., "user", "suggestion", "auto").
+</ParamField>
+
+## Agent Context Building
+
+The endpoint automatically builds rich context for the AI agent on each request:
+
+<Accordion title="AgentContext Type Definition">
+  ```typescript
+  interface AgentContext {
+    userId: string;           // Authenticated user ID
+    fullName: string;         // User's display name
+    schoolName: string;       // User's educational institution
+    classes: CanvasCourse[];  // Canvas LMS courses
+    currentDateTime: string;  // Localized current date/time
+    timezone: string;         // User's timezone (from geolocation or browser)
+    chatId: string;          // Current chat session ID
+    country?: string;        // User's country (from Vercel geolocation)
+    city?: string;           // User's city
+    region?: string;         // User's region/state
+  }
+  ```
+</Accordion>
+
+### Context Collection Process
+
+**route.ts:24-86**
+
+1. **Geolocation Extraction**: Captures user location from Vercel request headers
+   ```typescript
+   const location = geolocation(request);
+   ```
+
+2. **User Authentication**: Validates session and retrieves user profile
+   ```typescript
+   const authData = await auth.api.getSession({ headers: await headers() });
+   const userId = authData.user.id;
+   const fullName = authData.user.name;
+   ```
+
+3. **Canvas Integration**: Loads user's enrolled courses
+   ```typescript
+   const classesResponse = await getAllCanvasCourses();
+   const classes = typeof classesResponse === "string" ? [] : classesResponse;
+   ```
+
+4. **Timezone Detection**: Uses geolocation or browser defaults
+   ```typescript
+   const timezone = location.countryRegion || Intl.DateTimeFormat().resolvedOptions().timeZone;
+   ```
+
+## AI Model Configuration
+
+The endpoint uses **Claude Sonnet 4.5** with several advanced features:
+
+### Extended Thinking
+
+Enables deep reasoning for complex queries with a 10,000 token budget:
+
+```typescript
+thinking: {
+  type: "enabled" as const,
+  budgetTokens: 10000,
+}
+```
+
+<Tip>
+  Extended thinking allows the model to work through complex problems step-by-step before responding, improving accuracy for mathematical reasoning, planning, and multi-step tasks.
+</Tip>
+
+### Container Skills
+
+Persistent execution environment with document processing capabilities:
+
+**route.ts:108-124**
+
+```typescript
+container: {
+  id: existingContainerId, // Reuse container from previous messages
+  skills: [
+    { type: "anthropic" as const, skillId: "pptx" },  // PowerPoint creation/editing
+    { type: "anthropic" as const, skillId: "docx" },  // Word document handling
+    { type: "anthropic" as const, skillId: "xlsx" },  // Excel spreadsheet processing
+    { type: "anthropic" as const, skillId: "pdf" },   // PDF generation
+    { type: "custom" as const, skillId: "skill_01VmZ8Be2T5orYF7i1YiBUTv" },
+    { type: "custom" as const, skillId: "skill_01KxC6EtBShVCeb2jVEs7gXW" },
+  ],
+}
+```
+
+<Info>
+  Containers persist files across conversation turns and expire after ~4.5 minutes of inactivity. The `existingContainerId` is extracted from the last assistant message to maintain continuity.
+</Info>
+
+### Prompt Caching
+
+Optimizes token usage by caching static content:
+
+**route.ts:133-156**
+
+```typescript
+// Cache system prompt (largest static content)
+const systemPromptWithCache: ModelMessage = {
+  role: "system",
+  content: buildSystemPrompt(context),
+  providerOptions: {
+    anthropic: { cacheControl: { type: "ephemeral" } },
+  },
+};
+
+// Cache conversation history at strategic breakpoint
+const messagesWithCache = modelMessages.map((msg, idx) => {
+  if (idx === Math.max(0, modelMessages.length - 4)) {
+    return {
+      ...msg,
+      providerOptions: {
+        anthropic: { cacheControl: { type: "ephemeral" } },
+      },
+    };
+  }
+  return msg;
+});
+```
+
+## Tool Execution
+
+The agent has access to native and custom tools:
+
+### Native Anthropic Tools
+
+<CardGroup cols={2}>
+  <Card title="code_execution" icon="code">
+    Python sandbox for calculations and programmatic tool calling
+  </Card>
+  <Card title="web_search" icon="magnifying-glass">
+    Location-aware web search (uses geolocation from context)
+  </Card>
+  <Card title="memory" icon="brain">
+    Persistent user memory with filesystem-like interface
+  </Card>
+  <Card title="web_fetch" icon="globe">
+    Fetch and process web content from URLs
+  </Card>
+</CardGroup>
+
+### Custom Tools
+
+<Accordion title="Canvas LMS Tools">
+  - **searchContent**: Semantic search over Canvas assignments, pages, syllabus
+  - **getClassAssignments**: Fetch assignments (programmatic calling only)
+</Accordion>
+
+<Accordion title="Todo Management Tools (Programmatic Only)">
+  - **getTodos**: Retrieve user's todo list with filtering
+  - **createTodo**: Create new tasks with Canvas linking
+  - **updateTodo**: Modify existing todos
+  - **deleteTodo**: Permanently delete tasks
+</Accordion>
+
+<Accordion title="Study Tools">
+  - **createStudySet**: Generate flashcards with term/definition pairs
+</Accordion>
+
+<Info>
+  Tools marked "programmatic calling only" are invoked from within Python code execution blocks, enabling efficient batch operations without round-trip latency.
+</Info>
+
+## Streaming Response
+
+The endpoint returns a streaming response using AI SDK's `toUIMessageStreamResponse()`:
+
+**route.ts:158-195**
+
+```typescript
+const agent = new ToolLoopAgent({
+  model: anthropic("claude-sonnet-4-5"),
+  instructions: systemPromptWithCache,
+  tools,
+  providerOptions: providerOptions,
+  prepareStep: forwardAnthropicContainerIdFromLastStep,
+  onFinish: ({ steps }) => {
+    // Log cache performance metrics
+    const lastStep = steps[steps.length - 1];
+    const metadata = lastStep?.providerMetadata?.anthropic;
+    console.log("Cache read tokens:", metadata.cacheReadInputTokens);
+    console.log("Steps completed:", steps.length);
+  },
+});
+
+const result = await agent.stream({
+  messages: messagesWithCache,
+  experimental_transform: smoothStream({ chunking: "word" }),
+});
+
+return result.toUIMessageStreamResponse();
+```
+
+### Stream Format
+
+The stream includes:
+- **Text chunks**: Streamed word-by-word for smooth rendering
+- **Tool calls**: Real-time tool execution notifications
+- **Thinking blocks**: Extended reasoning steps (when enabled)
+- **Provider metadata**: Container IDs, cache metrics, token usage
+
+<CodeGroup>
+```typescript TypeScript Client
+import { useChat } from 'ai/react';
+
+const { messages, input, handleSubmit } = useChat({
+  api: '/api/chat',
+  body: {
+    id: chatId,
+    trigger: 'user',
+  },
+});
+```
+
+```javascript Fetch API
+const response = await fetch('/api/chat', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    messages: [
+      { role: 'user', content: 'What are my assignments this week?' }
+    ],
+    id: 'chat-123',
+  }),
+});
+
+const reader = response.body.getReader();
+const decoder = new TextDecoder();
+
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  const chunk = decoder.decode(value);
+  console.log('Stream chunk:', chunk);
+}
+```
+
+```bash cURL
+curl -X POST https://maxw.ai/api/chat \
+  -H "Content-Type: application/json" \
+  -H "Cookie: better-auth.session_token=..." \
+  -d '{
+    "messages": [
+      {
+        "role": "user",
+        "content": "Help me plan my study schedule for this week"
+      }
+    ],
+    "id": "chat-abc123"
+  }'
+```
+</CodeGroup>
+
+## Error Handling
+
+The endpoint includes comprehensive error handling:
+
+<ResponseField name="400 Bad Request" type="error">
+  Missing or invalid request parameters
+  
+  ```json
+  {
+    "error": "No messages provided or invalid format"
+  }
+  ```
+  
+  ```json
+  {
+    "error": "No chat ID provided"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="401 Unauthorized" type="error">
+  Invalid or missing session token
+  
+  ```json
+  {
+    "error": "Unauthorized"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="500 Internal Server Error" type="error">
+  Model or tool execution errors
+  
+  ```json
+  {
+    "error": "An error occurred while processing your request",
+    "details": "Error message details"
+  }
+  ```
+</ResponseField>
+
+## Performance Optimizations
+
+### Cache Metrics
+
+The `onFinish` callback logs cache performance:
+
+```typescript
+const lastStep = steps[steps.length - 1];
+const metadata = lastStep?.providerMetadata?.anthropic;
+
+console.log("Cache creation tokens:", metadata.cacheCreationInputTokens ?? 0);
+console.log("Cache read tokens:", metadata.cacheReadInputTokens ?? 0);
+console.log("Total input tokens:", lastStep.usage?.inputTokens ?? 0);
+
+const cacheHitRate = (cacheReadTokens / totalInputTokens) * 100;
+console.log("Cache hit rate:", `${Math.round(cacheHitRate)}%`);
+```
+
+<Tip>
+  Typical cache hit rates range from 60-80% for multi-turn conversations, significantly reducing latency and costs.
+</Tip>
+
+### Smooth Streaming
+
+Word-level chunking improves perceived responsiveness:
+
+```typescript
+experimental_transform: smoothStream({ chunking: "word" })
+```
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Agent Configuration" icon="robot" href="/ai/agents/general">
+    System prompt and tool configuration
+  </Card>
+  <Card title="Custom Tools" icon="wrench" href="/ai/tools/overview">
+    Canvas, Todo, and Study tool implementations
+  </Card>
+  <Card title="Memory System" icon="brain" href="/ai/memory">
+    Persistent user memory across conversations
+  </Card>
+  <Card title="Metadata API" icon="tag" href="/api/chat/metadata">
+    Chat title and suggestion generation
+  </Card>
+</CardGroup>

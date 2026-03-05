@@ -1,0 +1,216 @@
+---
+title: "User & Authentication Schema"
+description: "Database schema for user accounts, sessions, OAuth providers, and verification tokens"
+---
+
+The authentication schema manages user accounts, session management, OAuth integrations, and email verification.
+
+## User Table
+
+Core user account information with JSONB settings for flexible configuration.
+
+### Schema Definition
+
+<ResponseField name="id" type="text" required>
+  Primary key - unique user identifier
+</ResponseField>
+
+<ResponseField name="name" type="text" required>
+  User's display name
+</ResponseField>
+
+<ResponseField name="email" type="text" required>
+  User's email address (unique constraint)
+</ResponseField>
+
+<ResponseField name="emailVerified" type="boolean" default="false" required>
+  Whether the email address has been verified
+</ResponseField>
+
+<ResponseField name="image" type="text">
+  URL to user's profile image (optional)
+</ResponseField>
+
+<ResponseField name="createdAt" type="timestamp" default="now()" required>
+  Account creation timestamp
+</ResponseField>
+
+<ResponseField name="updatedAt" type="timestamp" default="now()" required>
+  Last update timestamp (auto-updates on modification)
+</ResponseField>
+
+<ResponseField name="settings" type="jsonb" default="{}" required>
+  User settings stored as JSONB
+  
+  <Accordion title="Settings Structure">
+    <ParamField path="canvasApiKey" type="string">
+      Canvas LMS API key for integration
+    </ParamField>
+    
+    <ParamField path="canvasDomain" type="string">
+      Canvas LMS domain (e.g., "school.instructure.com")
+    </ParamField>
+  </Accordion>
+</ResponseField>
+
+### Relationships
+
+- Has many `session` records (cascade delete)
+- Has many `account` records (cascade delete)
+- Has many `todo` records (cascade delete)
+- Has many `studySet` records (cascade delete)
+
+---
+
+## Session Table
+
+Manages user authentication sessions with expiration and tracking.
+
+### Schema Definition
+
+<ResponseField name="id" type="text" required>
+  Primary key - unique session identifier
+</ResponseField>
+
+<ResponseField name="expiresAt" type="timestamp" required>
+  Session expiration timestamp
+</ResponseField>
+
+<ResponseField name="token" type="text" required>
+  Session token (unique constraint)
+</ResponseField>
+
+<ResponseField name="createdAt" type="timestamp" default="now()" required>
+  Session creation timestamp
+</ResponseField>
+
+<ResponseField name="updatedAt" type="timestamp" required>
+  Last update timestamp (auto-updates on modification)
+</ResponseField>
+
+<ResponseField name="ipAddress" type="text">
+  IP address from which session was created (optional)
+</ResponseField>
+
+<ResponseField name="userAgent" type="text">
+  Browser/client user agent string (optional)
+</ResponseField>
+
+<ResponseField name="userId" type="text" required>
+  Foreign key to `user.id` (cascade delete)
+</ResponseField>
+
+### Relationships
+
+- Belongs to `user` (cascade delete when user is removed)
+
+---
+
+## Account Table
+
+Stores OAuth provider credentials and authentication tokens.
+
+### Schema Definition
+
+<ResponseField name="id" type="text" required>
+  Primary key - unique account identifier
+</ResponseField>
+
+<ResponseField name="accountId" type="text" required>
+  Provider's account identifier
+</ResponseField>
+
+<ResponseField name="providerId" type="text" required>
+  OAuth provider identifier (e.g., "google", "github")
+</ResponseField>
+
+<ResponseField name="userId" type="text" required>
+  Foreign key to `user.id` (cascade delete)
+</ResponseField>
+
+<ResponseField name="accessToken" type="text">
+  OAuth access token (optional)
+</ResponseField>
+
+<ResponseField name="refreshToken" type="text">
+  OAuth refresh token (optional)
+</ResponseField>
+
+<ResponseField name="idToken" type="text">
+  OAuth ID token (optional)
+</ResponseField>
+
+<ResponseField name="accessTokenExpiresAt" type="timestamp">
+  Access token expiration timestamp (optional)
+</ResponseField>
+
+<ResponseField name="refreshTokenExpiresAt" type="timestamp">
+  Refresh token expiration timestamp (optional)
+</ResponseField>
+
+<ResponseField name="scope" type="text">
+  OAuth scope string (optional)
+</ResponseField>
+
+<ResponseField name="password" type="text">
+  Hashed password for credential-based auth (optional)
+</ResponseField>
+
+<ResponseField name="createdAt" type="timestamp" default="now()" required>
+  Account creation timestamp
+</ResponseField>
+
+<ResponseField name="updatedAt" type="timestamp" default="now()" required>
+  Last update timestamp (auto-updates on modification)
+</ResponseField>
+
+### Relationships
+
+- Belongs to `user` (cascade delete when user is removed)
+
+---
+
+## Verification Table
+
+Manages email verification tokens and other verification processes.
+
+### Schema Definition
+
+<ResponseField name="id" type="text" required>
+  Primary key - unique verification identifier
+</ResponseField>
+
+<ResponseField name="identifier" type="text" required>
+  Identifier to verify (e.g., email address)
+</ResponseField>
+
+<ResponseField name="value" type="text" required>
+  Verification token value
+</ResponseField>
+
+<ResponseField name="expiresAt" type="timestamp" required>
+  Verification token expiration timestamp
+</ResponseField>
+
+<ResponseField name="createdAt" type="timestamp" default="now()" required>
+  Verification creation timestamp
+</ResponseField>
+
+<ResponseField name="updatedAt" type="timestamp" default="now()" required>
+  Last update timestamp (auto-updates on modification)
+</ResponseField>
+
+### Usage
+
+Verification records are typically short-lived and used for:
+- Email verification during registration
+- Password reset tokens
+- Two-factor authentication codes
+
+---
+
+## Database Configuration
+
+Source: `apps/web/src/db/schema/auth.ts`
+
+All foreign keys use `{ onDelete: "cascade" }` to automatically remove dependent records when a user is deleted.

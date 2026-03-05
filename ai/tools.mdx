@@ -1,0 +1,552 @@
+---
+title: "Available Tools"
+description: "Complete catalog of AI tools including Canvas LMS, Todo management, Study tools, and native Anthropic tools"
+---
+
+## Tool Categories
+
+The agent has access to two categories of tools:
+
+1. **Native Anthropic Tools**: Built-in capabilities (code_execution, web_search, memory, web_fetch)
+2. **Custom Tools**: Application-specific tools for Canvas, Todos, and Study
+
+## Native Anthropic Tools
+
+### code_execution
+
+Run Python code in a sandboxed environment.
+
+<ParamField path="code" type="string" required>
+  Python code to execute
+</ParamField>
+
+**Features**:
+- Files persist across conversation (~4.5 minute timeout)
+- Access to standard Python libraries
+- Can call other tools programmatically via `await toolName(params)`
+- Supports `asyncio` for parallel operations
+
+**Configuration**:
+```typescript
+code_execution: anthropic.tools.codeExecution_20250825()
+```
+
+### web_search
+
+Search the web for current information.
+
+<ParamField path="query" type="string" required>
+  Search query
+</ParamField>
+
+**Features**:
+- Location-aware results using user's city, region, country
+- Maximum 5 searches per conversation
+- Returns snippets with URLs
+
+**Configuration**:
+```typescript
+web_search: anthropic.tools.webSearch_20250305({
+  userLocation: {
+    type: "approximate",
+    city: ctx.city,
+    country: ctx.country,
+    region: ctx.region,
+    timezone: ctx.timezone,
+  },
+})
+```
+
+### memory
+
+Store and retrieve persistent user information with a filesystem-like interface.
+
+<ParamField path="command" type="enum" required>
+  Operation to perform: view, create, str_replace, insert, delete, rename
+</ParamField>
+
+<ParamField path="path" type="string" required>
+  File path (must start with /memories)
+</ParamField>
+
+**Configuration**:
+```typescript
+memory: anthropic.tools.memory_20250818({
+  execute: async (action) => {
+    return await executeMemoryCommand(ctx.userId, action);
+  },
+})
+```
+
+See [Memory System](/ai/memory) for detailed documentation.
+
+### web_fetch
+
+Fetch and process web content.
+
+<ParamField path="url" type="string" required>
+  URL to fetch
+</ParamField>
+
+**Configuration**:
+```typescript
+web_fetch: anthropic.tools.webFetch_20250910()
+```
+
+## Canvas LMS Tools
+
+### searchContent
+
+Semantic search across Canvas course content.
+
+<ParamField path="query" type="string" required>
+  Student's question or search query
+</ParamField>
+
+**Returns**:
+```typescript
+[
+  {
+    content: {
+      name: string,
+      allowed_attempts: number,
+      className: string,
+      description?: string,
+      due_at?: string,
+      lock_at?: string
+    },
+    id: string,
+    metadata: {
+      classId: number,
+      type: string
+    },
+    score: number // 0-1 relevance score
+  }
+]
+```
+
+**Allowed Callers**: Direct and code_execution
+
+**Implementation**:
+```typescript
+// apps/web/src/ai/tools/canvas/search-content.ts
+export const searchContentTool = tool({
+  description: "Search for assignments, announcements, and other course information...",
+  inputSchema: z.object({
+    query: z.string().describe("Student's question"),
+  }),
+  execute: async ({ query }) => {
+    return await queryCanvasIndex(query);
+  },
+  providerOptions: {
+    anthropic: {
+      allowedCallers: ["direct", "code_execution_20250825"],
+      cacheControl: { type: "ephemeral" },
+    },
+  },
+});
+```
+
+### getClassAssignments
+
+<Warning>**Programmatic only**: Can only be called from within code_execution</Warning>
+
+Fetch assignments from Canvas LMS.
+
+<ParamField path="classId" type="string">
+  Canvas class ID. If omitted, fetches from ALL classes in parallel
+</ParamField>
+
+<ParamField path="filter" type="enum">
+  Optional filter: past, overdue, undated, ungraded, unsubmitted, upcoming, future
+</ParamField>
+
+**Returns**:
+```typescript
+[
+  {
+    id: number,
+    name: string,
+    description: string,
+    due_at: string | null,
+    points_possible: number,
+    submission: { submitted_at: string | null },
+    _classId: string,    // Added when fetching all classes
+    _className: string   // Added when fetching all classes
+  }
+]
+```
+
+**Usage Example**:
+```python
+import json
+
+# Fetch from all classes
+result = await getClassAssignments({})
+assignments = json.loads(result)
+
+# Fetch from specific class with filter
+result = await getClassAssignments({
+    "classId": "12345",
+    "filter": "upcoming"
+})
+upcoming = json.loads(result)
+```
+
+**Implementation**:
+```typescript
+// apps/web/src/ai/tools/canvas/get-class-assignments.ts
+export const getClassAssignmentsTool = tool({
+  description: "Fetch assignments from Canvas LMS...",
+  inputSchema: z.object({
+    classId: z.string().optional(),
+    filter: z.enum([...]).optional(),
+  }),
+  execute: async ({ classId, filter }) => {
+    // Fetch logic with parallel processing for all classes
+  },
+  providerOptions: {
+    anthropic: {
+      allowedCallers: ["code_execution_20250825"],
+      cacheControl: { type: "ephemeral" },
+    },
+  },
+});
+```
+
+## Todo Management Tools
+
+<Warning>**All Todo tools are programmatic only**: Can only be called from code_execution</Warning>
+
+### getTodos
+
+Fetch user's todos filtered by view.
+
+<ParamField path="view" type="enum" required>
+  - `today`: Scheduled for today or overdue
+  - `upcoming`: Scheduled in the future
+  - `anytime`: No specific date
+  - `someday`: Later/maybe
+  - `active`: All uncompleted
+  - `logbook`: Completed items
+</ParamField>
+
+<ParamField path="limit" type="number">
+  For logbook view only: limit number of results (default 50)
+</ParamField>
+
+**Returns**: JSON string containing array of todo objects
+
+**Usage Example**:
+```python
+import json
+
+# Get today's todos
+todos_json = await getTodos({"view": "today"})
+todos = json.loads(todos_json)
+
+for todo in todos:
+    print(f"{todo['title']} - Due: {todo.get('dueDate')}")
+```
+
+### createTodo
+
+Create a new todo item.
+
+<ParamField path="title" type="string" required>
+  Todo title/description
+</ParamField>
+
+<ParamField path="description" type="string">
+  Optional detailed description
+</ParamField>
+
+<ParamField path="dateType" type="enum">
+  When to work on it:
+  - `calendar`: Specific date/time
+  - `calendarEvening`: Evening of date
+  - `anytime`: No specific time (default)
+  - `someday`: Later/maybe
+</ParamField>
+
+<ParamField path="scheduledDate" type="string">
+  ISO date string for when to work on it (for calendar/calendarEvening types)
+</ParamField>
+
+<ParamField path="dueDate" type="string">
+  ISO date string for deadline
+</ParamField>
+
+<ParamField path="subTasks" type="array">
+  Array of subtask objects: `[{ id: string, title: string, checked: boolean }]`
+</ParamField>
+
+<ParamField path="canvasContentType" type="enum">
+  Type of Canvas content: assignment, page, quiz, discussion
+</ParamField>
+
+<ParamField path="canvasContentId" type="number">
+  Canvas content ID (e.g., assignment ID)
+</ParamField>
+
+<ParamField path="canvasClassId" type="number">
+  Canvas class/course ID
+</ParamField>
+
+**Usage Example**:
+```python
+# Create todo linked to Canvas assignment
+await createTodo({
+    "title": "Complete Math Homework",
+    "description": "Chapter 5 exercises 1-20",
+    "dateType": "calendar",
+    "scheduledDate": "2026-03-08T14:00:00Z",
+    "dueDate": "2026-03-10T23:59:00Z",
+    "canvasContentType": "assignment",
+    "canvasContentId": 12345,
+    "canvasClassId": 67890
+})
+```
+
+### updateTodo
+
+Update an existing todo item.
+
+<ParamField path="id" type="string" required>
+  Todo ID to update
+</ParamField>
+
+<ParamField path="title" type="string">
+  New title
+</ParamField>
+
+<ParamField path="description" type="string">
+  New description
+</ParamField>
+
+<ParamField path="checked" type="boolean">
+  Mark as complete/incomplete
+</ParamField>
+
+<ParamField path="dateType" type="enum">
+  Change date type
+</ParamField>
+
+<ParamField path="scheduledDate" type="string">
+  ISO date string for new scheduled date
+</ParamField>
+
+<ParamField path="dueDate" type="string">
+  ISO date string for new due date
+</ParamField>
+
+<ParamField path="subTasks" type="array">
+  Updated subtasks array
+</ParamField>
+
+**Usage Example**:
+```python
+# Mark todo as complete
+await updateTodo({
+    "id": "todo-uuid-here",
+    "checked": True
+})
+
+# Reschedule todo
+await updateTodo({
+    "id": "todo-uuid-here",
+    "scheduledDate": "2026-03-12T10:00:00Z"
+})
+```
+
+### deleteTodo
+
+Delete a todo permanently.
+
+<ParamField path="id" type="string" required>
+  Todo ID to delete
+</ParamField>
+
+**Usage Example**:
+```python
+await deleteTodo({"id": "todo-uuid-here"})
+```
+
+## Study Tools
+
+### createStudySet
+
+Create flashcards or practice questions for studying.
+
+<ParamField path="displayMode" type="enum" required>
+  Display mode: flashcards, multiple-choice, short-answer
+</ParamField>
+
+<ParamField path="title" type="string" required>
+  Study set title
+</ParamField>
+
+<ParamField path="items" type="array" required>
+  Array of study items (see below)
+</ParamField>
+
+**Item Types**:
+
+<Accordion title="Term (Flashcard)">
+  ```typescript
+  {
+    type: "term",
+    tags: string[] | null,
+    term: string,
+    shortDefinition: string,
+    fullDefinition: string
+  }
+  ```
+</Accordion>
+
+<Accordion title="Question (Multiple Choice)">
+  ```typescript
+  {
+    type: "question",
+    tags: string[] | null,
+    prompt: string,
+    thinking: string | null,
+    explanation: string | null,
+    options: Array<{ correct: boolean, text: string }>
+  }
+  ```
+</Accordion>
+
+**Features**:
+- Supports LaTeX for math formulas: `$$x^2 + y^2 = z^2$$`
+- Multiple display modes for different learning styles
+- Tag-based organization
+
+**Allowed Callers**: Direct and code_execution
+
+**Usage Example**:
+
+<CodeGroup>
+
+```python Flashcards
+await createStudySet({
+    "displayMode": "flashcards",
+    "title": "Calculus I - Chapter 3",
+    "items": [
+        {
+            "type": "term",
+            "tags": ["derivatives"],
+            "term": "Power Rule",
+            "shortDefinition": "$$\\frac{d}{dx}[x^n] = nx^{n-1}$$",
+            "fullDefinition": "The derivative of x to the power of n equals n times x to the power of n minus 1."
+        },
+        {
+            "type": "term",
+            "tags": ["derivatives", "trigonometry"],
+            "term": "Derivative of sin(x)",
+            "shortDefinition": "$$\\frac{d}{dx}[\\sin(x)] = \\cos(x)$$",
+            "fullDefinition": "The derivative of sine x is cosine x."
+        }
+    ]
+})
+```
+
+```python Multiple Choice
+await createStudySet({
+    "displayMode": "multiple-choice",
+    "title": "Biology Quiz - Cell Structure",
+    "items": [
+        {
+            "type": "question",
+            "tags": ["organelles"],
+            "prompt": "Which organelle is responsible for cellular respiration?",
+            "thinking": "This is where ATP is produced through the breakdown of glucose.",
+            "explanation": "Mitochondria are the powerhouse of the cell, producing ATP through cellular respiration.",
+            "options": [
+                {"correct": False, "text": "Nucleus"},
+                {"correct": True, "text": "Mitochondria"},
+                {"correct": False, "text": "Ribosome"},
+                {"correct": False, "text": "Golgi Apparatus"}
+            ]
+        }
+    ]
+})
+```
+
+</CodeGroup>
+
+**Implementation**:
+```typescript
+// apps/web/src/ai/tools/study/flashcards.ts
+export const createStudySetTool = tool({
+  description: "Create flashcards or practice questions for studying...",
+  inputSchema: createStudySetToolInput,
+  execute: async (data) => {
+    return `Study set "${data.title}" created successfully with ${data.items.length} items...`;
+  },
+  providerOptions: {
+    anthropic: {
+      allowedCallers: ["direct", "code_execution_20250825"],
+      cacheControl: { type: "ephemeral" },
+    },
+  },
+});
+```
+
+## Tool Configuration Reference
+
+All tools are configured in `apps/web/src/ai/agents/general.ts`:
+
+```typescript
+export function getGeneralAgentTools(ctx: AgentContext): Record<string, any> {
+  return {
+    // Native Anthropic tools
+    code_execution: anthropic.tools.codeExecution_20250825(),
+    memory: anthropic.tools.memory_20250818({ execute: ... }),
+    web_search: anthropic.tools.webSearch_20250305({ userLocation: ... }),
+    web_fetch: anthropic.tools.webFetch_20250910(),
+
+    // Canvas LMS
+    searchContent: searchContentTool,
+    getClassAssignments: getClassAssignmentsTool,
+
+    // Todo management
+    getTodos: getTodosTool,
+    createTodo: createTodoTool,
+    updateTodo: updateTodoTool,
+    deleteTodo: deleteTodoTool,
+
+    // Study tools
+    createStudySet: createStudySetTool,
+  };
+}
+```
+
+## Provider Options
+
+All custom tools include provider-specific configuration:
+
+```typescript
+providerOptions: {
+  anthropic: {
+    allowedCallers: ["direct", "code_execution_20250825"],
+    cacheControl: { type: "ephemeral" },
+  },
+}
+```
+
+- **allowedCallers**: Restricts where tool can be invoked
+  - `"direct"`: Can be called directly by the model
+  - `"code_execution_20250825"`: Can be called from Python code
+- **cacheControl**: Uses ephemeral caching to reduce latency
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="General Agent" href="/ai/general-agent" icon="robot">
+    Learn about the system prompt and capabilities
+  </Card>
+  <Card title="Memory System" href="/ai/memory" icon="brain">
+    Deep dive into persistent user memory
+  </Card>
+</CardGroup>

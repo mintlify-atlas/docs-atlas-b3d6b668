@@ -1,0 +1,242 @@
+---
+title: "Todo Schema"
+description: "Database schema for task management with scheduling, Canvas LMS integration, and subtasks"
+---
+
+The todo schema provides flexible task management with multiple scheduling modes, Canvas LMS content linking, and nested subtasks.
+
+## Todo Table
+
+Core task management table with support for various scheduling patterns and Canvas integration.
+
+### Schema Definition
+
+<ResponseField name="id" type="text" required>
+  Primary key - auto-generated UUID
+</ResponseField>
+
+<ResponseField name="userId" type="text" required>
+  Foreign key to `user.id` (cascade delete)
+</ResponseField>
+
+<ResponseField name="title" type="text" default='""' required>
+  Task title or description
+</ResponseField>
+
+<ResponseField name="description" type="text">
+  Extended task description or notes (optional)
+</ResponseField>
+
+<ResponseField name="checked" type="boolean" default="false" required>
+  Whether the task is marked as complete
+</ResponseField>
+
+### Scheduling Fields
+
+<ResponseField name="dateType" type="enum" default="anytime">
+  Scheduling category for the task
+  
+  <Accordion title="Date Type Options">
+    <ParamField path="calendar" type="enum">
+      Scheduled for a specific date/time during the day
+    </ParamField>
+    
+    <ParamField path="calendarEvening" type="enum">
+      Scheduled for evening of a specific date
+    </ParamField>
+    
+    <ParamField path="anytime" type="enum">
+      Can be done anytime (default)
+    </ParamField>
+    
+    <ParamField path="someday" type="enum">
+      Future task without specific timeline
+    </ParamField>
+  </Accordion>
+</ResponseField>
+
+<ResponseField name="scheduledDate" type="timestamp">
+  When to work on the task (used with `calendar` or `calendarEvening` date types)
+</ResponseField>
+
+<ResponseField name="dueDate" type="timestamp">
+  Task deadline (optional, independent of scheduled date)
+</ResponseField>
+
+### Subtasks
+
+<ResponseField name="subTasks" type="jsonb">
+  Array of nested subtasks stored as JSONB
+  
+  <Accordion title="Subtask Structure">
+    <ParamField path="id" type="string" required>
+      Unique identifier for the subtask
+    </ParamField>
+    
+    <ParamField path="title" type="string" required>
+      Subtask title
+    </ParamField>
+    
+    <ParamField path="checked" type="boolean" required>
+      Whether the subtask is complete
+    </ParamField>
+  </Accordion>
+</ResponseField>
+
+### Canvas LMS Integration
+
+Todos can be linked to Canvas LMS content for assignment tracking.
+
+<ResponseField name="canvasContentType" type="enum">
+  Type of Canvas content linked to this todo
+  
+  <Accordion title="Canvas Content Types">
+    <ParamField path="assignment" type="enum">
+      Canvas assignment
+    </ParamField>
+    
+    <ParamField path="page" type="enum">
+      Canvas page content
+    </ParamField>
+    
+    <ParamField path="quiz" type="enum">
+      Canvas quiz
+    </ParamField>
+    
+    <ParamField path="discussion" type="enum">
+      Canvas discussion board post
+    </ParamField>
+  </Accordion>
+</ResponseField>
+
+<ResponseField name="canvasContentId" type="integer">
+  Canvas content item ID
+</ResponseField>
+
+<ResponseField name="canvasClassId" type="integer">
+  Canvas course ID
+</ResponseField>
+
+### Metadata
+
+<ResponseField name="completedAt" type="timestamp">
+  Timestamp when task was marked complete (null if not completed)
+</ResponseField>
+
+<ResponseField name="createdAt" type="timestamp" default="now()" required>
+  Task creation timestamp
+</ResponseField>
+
+<ResponseField name="updatedAt" type="timestamp" default="now()" required>
+  Last update timestamp (auto-updates on modification)
+</ResponseField>
+
+---
+
+## Relationships
+
+- Belongs to `user` (cascade delete when user is removed)
+
+---
+
+## Enums
+
+### Date Type Enum
+
+```typescript
+export const dateTypeEnum = pgEnum("date_type", [
+  "calendar",
+  "calendarEvening",
+  "anytime",
+  "someday",
+]);
+```
+
+### Canvas Content Type Enum
+
+```typescript
+export const canvasContentTypeEnum = pgEnum("canvas_content_type", [
+  "assignment",
+  "page",
+  "quiz",
+  "discussion",
+]);
+```
+
+---
+
+## Type Exports
+
+```typescript
+// Subtask type for JSONB storage
+export type TodoSubTask = {
+  id: string;
+  title: string;
+  checked: boolean;
+};
+
+// Inferred types from schema
+export type Todo = typeof todo.$inferSelect;
+export type NewTodo = typeof todo.$inferInsert;
+```
+
+---
+
+## Usage Examples
+
+### Creating a Simple Todo
+
+```typescript
+await db.insert(todo).values({
+  userId: "user_123",
+  title: "Complete homework",
+  dateType: "anytime",
+});
+```
+
+### Creating a Scheduled Todo with Due Date
+
+```typescript
+await db.insert(todo).values({
+  userId: "user_123",
+  title: "Team meeting",
+  dateType: "calendar",
+  scheduledDate: new Date("2026-03-10T14:00:00Z"),
+  dueDate: new Date("2026-03-10T15:00:00Z"),
+});
+```
+
+### Creating a Todo with Subtasks
+
+```typescript
+await db.insert(todo).values({
+  userId: "user_123",
+  title: "Research project",
+  subTasks: [
+    { id: "1", title: "Find sources", checked: false },
+    { id: "2", title: "Write outline", checked: false },
+    { id: "3", title: "Draft introduction", checked: false },
+  ],
+});
+```
+
+### Linking to Canvas Assignment
+
+```typescript
+await db.insert(todo).values({
+  userId: "user_123",
+  title: "Submit essay",
+  canvasContentType: "assignment",
+  canvasContentId: 12345,
+  canvasClassId: 67890,
+  dueDate: new Date("2026-03-15T23:59:00Z"),
+});
+```
+
+---
+
+## Database Configuration
+
+Source: `apps/web/src/db/schema/todo.ts`
+
+All foreign keys use `{ onDelete: "cascade" }` to automatically remove todos when a user is deleted.

@@ -1,0 +1,164 @@
+---
+title: "Study Schema"
+description: "Database schema for study sets and flashcard items"
+---
+
+The study schema enables creation of study sets containing flashcards and quiz questions for learning.
+
+## StudySet Table
+
+Container for collections of study materials.
+
+### Schema Definition
+
+<ResponseField name="id" type="text" required>
+  Primary key - auto-generated UUID
+</ResponseField>
+
+<ResponseField name="userId" type="text" required>
+  Foreign key to `user.id` (cascade delete)
+</ResponseField>
+
+<ResponseField name="title" type="text" required>
+  Study set title or topic
+</ResponseField>
+
+<ResponseField name="createdAt" type="timestamp">
+  Study set creation timestamp
+</ResponseField>
+
+### Relationships
+
+- Belongs to `user` (cascade delete when user is removed)
+- Has many `studySetItem` records (cascade delete)
+
+---
+
+## StudySetItem Table
+
+Individual study items (flashcards or questions) within a study set.
+
+### Schema Definition
+
+<ResponseField name="id" type="text" required>
+  Primary key - auto-generated UUID
+</ResponseField>
+
+<ResponseField name="studySetId" type="text" required>
+  Foreign key to `studySet.id` (cascade delete)
+</ResponseField>
+
+<ResponseField name="type" type="string" required>
+  Item type - either `"term"` or `"question"`
+  
+  <Accordion title="Item Types">
+    <ParamField path="term" type="string">
+      Flashcard with term and definition
+    </ParamField>
+    
+    <ParamField path="question" type="string">
+      Question with answer
+    </ParamField>
+  </Accordion>
+</ResponseField>
+
+### Relationships
+
+- Belongs to `studySet` (cascade delete when study set is removed)
+
+---
+
+## Relationships Overview
+
+```
+user (1) ──── (many) studySet
+                  |
+                  └──── (many) studySetItem
+```
+
+### Cascade Deletion
+
+The schema uses cascade deletion to maintain referential integrity:
+
+1. When a `user` is deleted:
+   - All associated `studySet` records are deleted
+   - All associated `studySetItem` records are deleted (via studySet cascade)
+
+2. When a `studySet` is deleted:
+   - All associated `studySetItem` records are deleted
+
+---
+
+## Usage Examples
+
+### Creating a Study Set
+
+```typescript
+const [newSet] = await db.insert(studySet).values({
+  userId: "user_123",
+  title: "Biology Chapter 5: Cell Structure",
+  createdAt: new Date(),
+}).returning();
+```
+
+### Adding Flashcard Items
+
+```typescript
+await db.insert(studySetItem).values([
+  {
+    studySetId: newSet.id,
+    type: "term",
+    // Additional fields for term/definition would be stored elsewhere
+  },
+  {
+    studySetId: newSet.id,
+    type: "question",
+    // Additional fields for question/answer would be stored elsewhere
+  },
+]);
+```
+
+### Querying a Study Set with Items
+
+```typescript
+const setWithItems = await db.query.studySet.findFirst({
+  where: eq(studySet.id, setId),
+  with: {
+    items: true,
+  },
+});
+```
+
+---
+
+## Type Definitions
+
+```typescript
+// Relations definition
+export const studySetRelations = relations(studySet, ({ many }) => ({
+  items: many(studySetItem),
+}));
+```
+
+---
+
+## AI Integration
+
+Study sets are typically created via the `createStudySet` AI tool, which:
+
+1. Generates flashcards from source material (lectures, notes, readings)
+2. Creates the study set with appropriate title
+3. Populates items with term/definition or question/answer pairs
+4. Returns the complete study set for review
+
+The AI agent can access Canvas LMS content to automatically generate study materials from course assignments, pages, and syllabi.
+
+---
+
+## Database Configuration
+
+Source: `apps/web/src/db/schema/study.ts`
+
+All foreign keys use `{ onDelete: "cascade" }` to automatically remove dependent records:
+- Study sets are deleted when the owning user is deleted
+- Study items are deleted when the parent study set is deleted

@@ -1,0 +1,192 @@
+---
+title: AI Chat
+description: Interact with an intelligent AI assistant powered by Claude that helps you with coursework, tasks, and studying
+---
+
+Maxw AI features an advanced AI chat interface powered by **Anthropic Claude Sonnet 4.5**, designed specifically for students. The AI assistant helps you manage coursework, answer questions, create study materials, and stay organized.
+
+## Overview
+
+The AI chat provides a conversational interface where you can ask questions, get help with assignments, create study materials, and manage your tasks. The assistant has access to your Canvas courses, todos, and study materials to provide personalized help.
+
+## Starting a Conversation
+
+To start using the AI chat:
+
+1. Navigate to the chat page from the main navigation
+2. Type your question or request in the input field
+3. Press Enter or click the send button
+4. The AI will process your request and respond with streaming text
+
+<Note>
+The AI assistant remembers context from your conversation, so you can ask follow-up questions naturally.
+</Note>
+
+## Key Capabilities
+
+The AI assistant offers several powerful features to help you succeed:
+
+<CardGroup cols={2}>
+  <Card title="Web Search" icon="globe">
+    Search the web for current information beyond the AI's knowledge cutoff. Location-aware for relevant local results.
+  </Card>
+  
+  <Card title="Code Execution" icon="code">
+    Run Python code for calculations, data processing, and analysis in a sandboxed environment.
+  </Card>
+  
+  <Card title="Canvas Integration" icon="book">
+    Search your course content, assignments, and materials. Get personalized help based on your actual coursework.
+  </Card>
+  
+  <Card title="Memory" icon="brain">
+    The AI remembers important information about you across conversations, including preferences and goals.
+  </Card>
+</CardGroup>
+
+## AI Tools
+
+The assistant has access to specialized tools that enhance its capabilities:
+
+### Canvas LMS Tools
+
+- **searchContent**: Semantic search across your Canvas courses, assignments, pages, and syllabus
+- **getClassAssignments**: Retrieve assignments from one or all of your classes, with filtering by date and status
+
+### Task Management Tools
+
+- **getTodos**: View your todo list with different views (today, upcoming, anytime, someday)
+- **createTodo**: Create new tasks, optionally linked to Canvas assignments
+- **updateTodo**: Modify existing tasks, mark complete/incomplete, change dates
+- **deleteTodo**: Remove tasks permanently
+
+### Study Tools
+
+- **createStudySet**: Generate flashcards with terms and definitions, or practice questions with multiple choice options
+- Supports LaTeX formatting for mathematical formulas
+
+### Document Processing
+
+- Create and edit PowerPoint presentations (`.pptx`)
+- Generate Word documents (`.docx`)
+- Create Excel spreadsheets (`.xlsx`)
+- Process PDF files
+
+## Extended Thinking
+
+For complex questions, the AI uses **extended thinking** with a 10,000 token budget. This allows it to:
+
+- Break down complicated problems step-by-step
+- Reason through multi-part questions
+- Provide more thorough and well-thought-out responses
+
+## Example Interactions
+
+Here are some ways you can use the AI chat:
+
+<Accordion title="Academic Help">
+  - "What assignments do I have due this week?"
+  - "Search my biology course for information about photosynthesis"
+  - "Create a study guide for my upcoming chemistry exam"
+  - "Explain this concept from my physics class"
+</Accordion>
+
+<Accordion title="Task Management">
+  - "Add all my Canvas assignments to my todo list"
+  - "Show me what I need to do today"
+  - "Create a task to finish my essay by Friday"
+  - "Mark my math homework as complete"
+</Accordion>
+
+<Accordion title="Study Materials">
+  - "Create flashcards for Spanish vocabulary chapter 5"
+  - "Generate practice questions for the Civil War"
+  - "Make a study set about cellular respiration"
+</Accordion>
+
+<Accordion title="Research & Information">
+  - "What's the latest news about climate change?"
+  - "Search for information about quantum computing"
+  - "Find current statistics on renewable energy"
+</Accordion>
+
+## Programmatic Tool Calling
+
+The AI can chain multiple operations together using Python code execution. This enables:
+
+- **Reduced latency**: No round trips between tool calls
+- **Conditional logic**: Make decisions based on intermediate results
+- **Batch processing**: Handle multiple assignments or tasks efficiently
+- **Advanced filtering**: Process large datasets before showing results
+
+For example, the AI can fetch all your assignments, filter by due date, and automatically create todos for high-priority items—all in a single operation.
+
+## Conversation Features
+
+### Streaming Responses
+
+Responses stream word-by-word for a natural reading experience. You can see the AI's thoughts as they're generated.
+
+### Context Awareness
+
+The assistant has access to:
+
+- Your full name and school
+- Current date, time, and timezone
+- Your Canvas courses and course codes
+- Your location (for weather, local events, etc.)
+
+### Memory System
+
+The AI proactively saves important information:
+
+- Your preferences and study habits
+- Important facts you share
+- Goals and deadlines
+- Common patterns in how you work
+
+<Note>
+The memory system uses a filesystem-like interface to organize information about you efficiently.
+</Note>
+
+## Style and Tone
+
+The AI adapts its communication style based on context:
+
+- **Casual conversations**: Natural, friendly, and playful
+- **Academic help**: Clear, structured, and informative
+- **Technical topics**: Precise and detailed
+- Uses emoji sparingly and appropriately
+- Formats responses with Markdown for better readability
+- Supports LaTeX for mathematical notation
+
+## Best Practices
+
+1. **Be specific**: The more context you provide, the better the AI can help
+2. **Use follow-ups**: Build on previous messages instead of starting over
+3. **Reference your courses**: Mention specific classes or assignments for personalized help
+4. **Ask for study materials**: The AI can generate custom flashcards and practice questions
+5. **Let it manage tasks**: Use the todo integration to stay organized
+
+## Technical Details
+
+- **Model**: Anthropic Claude Sonnet 4.5
+- **Architecture**: ToolLoopAgent with native AI SDK v6
+- **Streaming**: AI SDK React with smooth word-chunked streaming
+- **Container persistence**: Tool execution environment persists for ~4.5 minutes
+- **Caching**: Prompt caching for optimized performance and cost
+
+## Privacy and Security
+
+All conversations are:
+
+- Associated with your user account
+- Stored securely in the database
+- Used only to provide you with personalized assistance
+- Not shared with other users
+
+The AI does not have access to:
+
+- Your Canvas credentials (stored encrypted in settings)
+- Other users' data
+- Information outside what you explicitly share or authorize

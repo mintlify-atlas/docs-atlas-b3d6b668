@@ -1,0 +1,267 @@
+---
+title: "Web Application"
+description: "Next.js 16 web application with React 19, TailwindCSS 4, and shadcn/ui components"
+---
+
+The Maxw AI web application is built with Next.js 16 using the App Router architecture and React 19, providing a modern, performant foundation for the AI-powered assistant interface.
+
+## Technology Stack
+
+The web app leverages cutting-edge technologies for optimal performance and developer experience:
+
+<CardGroup cols={2}>
+  <Card title="Next.js 16" icon="react">
+    App Router with Server Components, Turbopack, and typed routes
+  </Card>
+  <Card title="React 19" icon="atom">
+    Latest React features with improved server component support
+  </Card>
+  <Card title="TailwindCSS 4" icon="paintbrush">
+    Utility-first CSS with automatic class sorting via Biome
+  </Card>
+  <Card title="shadcn/ui" icon="palette">
+    Accessible component library built on Radix UI primitives
+  </Card>
+</CardGroup>
+
+## Frontend Stack
+
+### UI Framework
+
+- **Next.js 16.1.1** with App Router and Turbopack for fast development
+- **React 19.2.3** with Server Components and React Server Actions
+- **TypeScript 5.9.3** for type safety across the application
+- **TailwindCSS 4.1.18** with `@tailwindcss/postcss` for styling
+- **Framer Motion 12** for smooth animations and transitions
+
+### Component Library
+
+The app uses **shadcn/ui** components built on top of Radix UI primitives:
+
+- Accordion, Avatar, Badge, Button, Calendar
+- Card, Carousel, Chart (with Recharts)
+- Command Palette (CMDK), Dialog, Dropdown Menu
+- Form components with React Hook Form integration
+- Hover Card, Input, Label, Popover, Progress
+- Scroll Area, Select, Separator, Switch, Tooltip
+
+All components are customizable via the `cn()` utility and support dark mode through `next-themes`.
+
+### State Management
+
+<Tabs>
+  <Tab title="Client State">
+    **Zustand** for global client state management:
+    - Lightweight and unopinionated
+    - No boilerplate required
+    - DevTools support in development
+  </Tab>
+  <Tab title="Server State">
+    **TanStack Query** (React Query) for server state:
+    - Automatic caching and background refetching
+    - Optimistic updates and mutations
+    - Persistence via async storage persister
+  </Tab>
+  <Tab title="Form State">
+    **TanStack React Form** for form management:
+    - Type-safe form state
+    - Zod schema validation
+    - Field-level validation and errors
+  </Tab>
+</Tabs>
+
+## Backend Stack
+
+### Database Layer
+
+- **PostgreSQL** via Neon serverless driver (`@neondatabase/serverless`)
+- **Drizzle ORM** for type-safe database queries and migrations
+- **Database location**: Connection string in root `.env` file
+
+<Note>
+Database configuration is defined in `drizzle.config.ts` at the root level, not in `apps/web/.env`. All migrations are stored in `apps/web/src/db/migrations`.
+</Note>
+
+### Authentication
+
+- **Better-Auth 1.4.10** for session-based authentication
+- OAuth provider support via `account` table
+- Session management with IP tracking and expiration
+- Expo integration for cross-platform authentication
+
+### AI Integration
+
+<CardGroup cols={2}>
+  <Card title="Anthropic Claude" icon="brain">
+    Claude Sonnet 4.5 via `@ai-sdk/anthropic` with native tool support
+  </Card>
+  <Card title="OpenAI" icon="openai">
+    GPT models via `@ai-sdk/openai` for embeddings and fallback
+  </Card>
+  <Card title="AI SDK" icon="robot">
+    Vercel AI SDK with streaming, tools, and artifacts support
+  </Card>
+  <Card title="Upstash Search" icon="search">
+    Semantic search for Canvas LMS content indexing
+  </Card>
+</CardGroup>
+
+The AI agent system uses:
+- **ToolLoopAgent** with container-based execution
+- **Extended thinking** (10k token budget)
+- **Native Anthropic tools**: code execution, web search, memory, web fetch
+- **Custom tools**: Canvas content search, todo management, study sets
+
+## Project Structure
+
+The web app follows Next.js 16 App Router conventions:
+
+```
+apps/web/src/
+├── ai/                      # AI agent system
+│   ├── agents/              # Agent configurations (general, secretary, study)
+│   ├── artifacts/           # AI artifact definitions
+│   ├── skills/              # Agent skill documentation
+│   ├── tools/               # Custom tools (canvas, todo, study)
+│   ├── types/               # AI-related TypeScript types
+│   └── utils/               # AI utilities (memory, Upstash helpers)
+├── app/                     # Next.js App Router routes
+│   ├── api/                 # API routes
+│   │   ├── auth/            # Better-Auth endpoints
+│   │   ├── chat/            # AI chat streaming
+│   │   ├── cron/            # Scheduled tasks
+│   │   └── metadata/        # Chat metadata generation
+│   ├── chat/                # Chat interface pages
+│   ├── classes/             # Canvas class management
+│   ├── login/               # Authentication pages
+│   ├── onboarding/          # User onboarding flow
+│   ├── study/               # Study materials interface
+│   ├── todo/                # Todo management UI
+│   ├── layout.tsx           # Root layout with providers
+│   └── page.tsx             # Home page
+├── components/              # React components
+│   └── ui/                  # shadcn/ui components
+├── db/                      # Database configuration
+│   ├── schema/              # Drizzle schema definitions
+│   │   ├── auth.ts          # User, session, account tables
+│   │   ├── memory.ts        # AI memory storage
+│   │   ├── study.ts         # Study sets and items
+│   │   └── todo.ts          # Todo items with Canvas integration
+│   └── index.ts             # Database client export
+├── hooks/                   # React hooks
+├── lib/                     # Shared utilities
+│   └── utils.ts             # cn(), toTitleCase(), humanReadableDate()
+├── routers/                 # API routers
+├── types/                   # TypeScript type definitions
+├── env.ts                   # Environment variable validation
+└── index.css                # Global styles with Tailwind directives
+```
+
+## API Routes
+
+The web app exposes several API endpoints:
+
+### `/api/auth`
+Better-Auth authentication endpoints handling:
+- User registration and login
+- OAuth provider authentication
+- Session management
+- Account linking
+
+### `/api/chat`
+AI chat streaming endpoint:
+- Uses Anthropic Claude Sonnet 4.5
+- Streams responses with tool execution
+- Supports extended thinking mode
+- Container-based execution with skill persistence
+- Context includes user info, geolocation, timezone, classes
+
+### `/api/metadata`
+Chat metadata generation:
+- Auto-generates chat titles
+- Provides contextual suggestions
+- Used for conversation organization
+
+### `/api/cron`
+Scheduled tasks for:
+- Canvas content synchronization
+- Assignment deadline notifications
+- Database cleanup operations
+
+## Development Features
+
+<Tabs>
+  <Tab title="Developer Tools">
+    - **React Query DevTools** for debugging server state
+    - **AI SDK DevTools** for inspecting AI interactions
+    - **Drizzle Studio** for database management (`bun db:studio`)
+    - **Biome** for linting and formatting with auto-fix
+  </Tab>
+  <Tab title="Performance">
+    - **Turbopack** for fast development builds
+    - **Server Components** for reduced client bundle size
+    - **Streaming SSR** for improved time-to-first-byte
+    - **Automatic code splitting** via Next.js
+  </Tab>
+  <Tab title="Type Safety">
+    - **Typed routes** enabled for navigation type safety
+    - **Zod** for runtime validation
+    - **Drizzle** for type-safe database queries
+    - **@t3-oss/env-nextjs** for environment variable validation
+  </Tab>
+</Tabs>
+
+## Environment Configuration
+
+<Warning>
+Environment variables are stored at the **repository root** in `.env`, not in `apps/web/.env`. The Next.js config loads variables from `../../.env`.
+</Warning>
+
+Required environment variables:
+
+```bash
+DATABASE_URL                          # PostgreSQL connection string
+AUTH_SECRET                           # Better-Auth secret key
+UPSTASH_SEARCH_URL                    # Upstash Search endpoint
+UPSTASH_SEARCH_TOKEN                  # Upstash Search API token
+NEXT_PUBLIC_UPSTASH_SEARCH_TOKEN      # Public Upstash token
+OPENAI_API_KEY                        # OpenAI API key
+ANTHROPIC_API_KEY                     # Anthropic API key
+GOOGLE_GENERATIVE_AI_API_KEY          # Google AI API key
+```
+
+Validation is enforced at build time using `@t3-oss/env-nextjs` in `src/env.ts`.
+
+## Build & Deployment
+
+### Development
+```bash
+bun dev:web              # Start dev server with Turbopack
+bun db:push              # Push schema changes to database
+bun db:studio            # Open Drizzle Studio
+bun check                # Run Biome linting and formatting
+```
+
+### Production
+```bash
+bun build:web            # Build for production
+bun db:generate          # Generate migration files
+bun db:migrate           # Run migrations
+bun check-types          # Type check all files
+```
+
+<Note>
+The web app runs on port 3000 by default. Canvas integration credentials are stored in the `user.settings` JSONB column, allowing flexible per-user configuration.
+</Note>
+
+## Next.js Configuration
+
+Key Next.js features enabled:
+
+- **Typed Routes**: Type-safe navigation with autocomplete
+- **Component Caching**: Optimized component rendering
+- **View Transitions**: Smooth page transitions (experimental)
+- **Image Optimization**: Remote patterns for Canvas LMS images
+- **Turbopack**: Fast development builds
+
+See `next.config.ts` for full configuration details.

@@ -1,0 +1,334 @@
+---
+title: Canvas LMS Integration
+description: Learn how Maxw AI integrates with Canvas LMS for intelligent assignment tracking, semantic search, and automated course material access.
+---
+
+Maxw AI provides deep integration with Canvas LMS, enabling intelligent access to course materials, assignments, and syllabus content through semantic search and AI-powered tools.
+
+## Overview
+
+The Canvas LMS integration allows Maxw AI to:
+
+- Import and index course materials for semantic search
+- Access assignments, pages, and course content programmatically
+- Search across all courses with natural language queries
+- Track due dates and assignment details
+- Generate study materials from course content
+
+## Credential Storage
+
+Canvas API credentials are stored securely in the `user.settings` JSONB column in the database. This flexible storage approach allows for easy configuration without schema migrations.
+
+### User Settings Schema
+
+Credentials are stored as part of the user settings object:
+
+```typescript
+interface UserSettings {
+  canvasApiKey?: string;
+  canvasDomain?: string;
+}
+```
+
+**Implementation:** `/home/daytona/workspace/source/apps/web/src/db/schema/types.ts:3`
+
+<Note>
+The `canvasDomain` should be the base domain without protocol (e.g., `canvas.university.edu`)
+</Note>
+
+## Document Indexing with Upstash
+
+Maxw AI uses **Upstash Search** to provide fast semantic search across all Canvas course materials. Documents are indexed, chunked, and stored for efficient retrieval.
+
+### Indexing Strategy
+
+<Steps>
+  <Step title="Fetch Course Data">
+    The system fetches all active courses, assignments, and pages from Canvas API using the stored credentials.
+  </Step>
+  
+  <Step title="Convert HTML to Markdown">
+    HTML content in `description` and `body` fields is converted to Markdown using Turndown for better readability and indexing.
+  </Step>
+  
+  <Step title="Chunk Large Documents">
+    Documents exceeding 4000 characters are automatically split into smaller chunks while preserving metadata.
+  </Step>
+  
+  <Step title="Upsert to Upstash">
+    Documents are uploaded to the Upstash Search index in batches of 100 for optimal performance.
+  </Step>
+</Steps>
+
+### Chunking Configuration
+
+**Implementation:** `/home/daytona/workspace/source/apps/web/src/ai/utils/upstash-helpers.ts:14`
+
+```typescript
+const MAX_DOCUMENT_SIZE = 4000;      // Maximum document size before chunking
+const CHUNK_BUFFER_SIZE = 100;        // Buffer to prevent edge overflow
+const RUBRIC_STRIP_THRESHOLD = 200;   // Strip rubrics if base content is large
+const MIN_CHUNK_SIZE = 100;           // Minimum size for text chunks
+const UPSERT_BATCH_SIZE = 100;        // Batch size for Upstash upserts
+const SEARCH_RESULT_LIMIT = 10;       // Maximum search results returned
+```
+
+### Document Structure
+
+Each indexed document contains:
+
+```typescript
+interface DocumentChunk {
+  id: string;                           // Format: "assignment-123" or "page-456"
+  metadata: {
+    classId: number;                    // Canvas course ID
+    type: "assignment" | "page";        // Content type
+  };
+  content: {
+    name?: string;                      // Title of the content
+    className: string;                  // Course name
+    description?: string;               // Assignment description (Markdown)
+    body?: string;                      // Page content (Markdown)
+    due_at?: string;                    // Due date (ISO 8601)
+    lock_at?: string;                   // Lock date
+    allowed_attempts?: number;          // For assignments
+    rubric?: object;                    // Rubric data (stripped if too large)
+    todo_date?: string;                 // For pages
+    updated_at?: string;                // Last update timestamp
+  };
+}
+```
+
+<Warning>
+Large documents are split by their largest text field (`description` or `body`). Rubrics are automatically removed from oversized base content to stay within limits.
+</Warning>
+
+## AI Tools
+
+Maxw AI provides two Canvas-specific tools for the AI agent:
+
+### searchContent Tool
+
+**Implementation:** `/home/daytona/workspace/source/apps/web/src/ai/tools/canvas/search-content.ts:5`
+
+Searches indexed Canvas content using natural language queries.
+
+```typescript
+await searchContent({
+  query: "What is the due date for the midterm project?"
+});
+```
+
+**Returns:**
+```json
+[
+  {
+    "content": {
+      "name": "Midterm Project",
+      "className": "Computer Science 101",
+      "description": "Complete the midterm project...",
+      "due_at": "2026-03-15T23:59:00Z",
+      "allowed_attempts": 1
+    },
+    "id": "assignment-12345",
+    "metadata": {
+      "classId": 67890,
+      "type": "assignment"
+    },
+    "score": 0.92
+  }
+]
+```
+
+**Features:**
+- Semantic search with reranking enabled
+- Returns top 10 most relevant results
+- Includes relevance score (0-1)
+- Can be called directly or from Python code execution
+
+### getClassAssignments Tool
+
+**Implementation:** `/home/daytona/workspace/source/apps/web/src/ai/tools/canvas/get-class-assignments.ts:14`
+
+Fetches assignments from Canvas API programmatically. This tool is only callable via Python code execution.
+
+```python
+# Fetch assignments from all classes
+all_assignments = await getClassAssignments({})
+
+# Fetch assignments from specific class
+class_assignments = await getClassAssignments({"classId": "67890"})
+
+# Fetch with filter
+upcoming = await getClassAssignments({"filter": "upcoming"})
+```
+
+**Supported Filters:**
+- `past` - Past due assignments
+- `overdue` - Overdue assignments
+- `undated` - Assignments without due dates
+- `ungraded` - Ungraded submissions
+- `unsubmitted` - Not yet submitted
+- `upcoming` - Due soon
+- `future` - Future assignments
+
+<Note>
+When called without `classId`, the tool fetches assignments from ALL courses in parallel and adds `_classId` and `_className` fields to each assignment.
+</Note>
+
+## Importing Course Materials
+
+To update the Canvas search index with the latest course materials:
+
+**Implementation:** `/home/daytona/workspace/source/apps/web/src/ai/utils/upstash-helpers.ts:251`
+
+```typescript
+import { updateCanvasIndex } from "@/ai/utils/upstash-helpers";
+
+const result = await updateCanvasIndex();
+
+if (typeof result === "string") {
+  // Error occurred
+  console.error(result);
+} else {
+  // Success - result contains all indexed documents
+  console.log(`Indexed ${result.length} documents`);
+}
+```
+
+### Update Process
+
+<Steps>
+  <Step title="Fetch All Courses">
+    Retrieves all active Canvas courses for the user.
+  </Step>
+  
+  <Step title="Process in Parallel">
+    Each course's assignments and pages are processed concurrently for speed.
+  </Step>
+  
+  <Step title="Convert and Chunk">
+    HTML is converted to Markdown, and large documents are split into chunks.
+  </Step>
+  
+  <Step title="Batch Upload">
+    Documents are uploaded to Upstash in batches of 100.
+  </Step>
+</Steps>
+
+## API Authentication Flow
+
+All Canvas API requests use the stored credentials for authentication:
+
+**Implementation:** `/home/daytona/workspace/source/apps/web/src/app/classes/classes-actions.ts:15`
+
+```typescript
+// 1. Verify user session
+const authData = await auth.api.getSession({ headers: await headers() });
+if (!authData) return "Unauthorized";
+
+// 2. Fetch user settings from database
+const settings = (
+  await db.query.user.findFirst({ where: eq(user.id, authData.user.id) })
+)?.settings;
+
+// 3. Validate Canvas credentials
+if (!settings?.canvasApiKey || !settings.canvasDomain) {
+  return "Settings not configured";
+}
+
+// 4. Make authenticated Canvas API request
+const response = await fetch(
+  `https://${settings.canvasDomain}/api/v1/courses`,
+  {
+    headers: {
+      Authorization: `Bearer ${settings.canvasApiKey}`,
+    },
+  }
+);
+```
+
+## Configuration Requirements
+
+<Accordion title="Environment Variables">
+  ```bash
+  UPSTASH_SEARCH_URL=https://your-instance.upstash.io
+  UPSTASH_SEARCH_TOKEN=your_search_token
+  NEXT_PUBLIC_UPSTASH_SEARCH_TOKEN=your_public_token
+  ```
+</Accordion>
+
+<Accordion title="Database Schema">
+  The `user` table must include the `settings` JSONB column:
+  
+  ```sql
+  CREATE TABLE "user" (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    settings JSONB DEFAULT '{}' NOT NULL,
+    -- other fields...
+  );
+  ```
+</Accordion>
+
+<Accordion title="Canvas API Token">
+  Users must generate a Canvas API token:
+  
+  1. Log into Canvas
+  2. Navigate to Account → Settings
+  3. Scroll to "Approved Integrations"
+  4. Click "+ New Access Token"
+  5. Set purpose and expiration
+  6. Copy the generated token
+  
+  <Warning>
+  Canvas API tokens should be treated as passwords and never committed to source control.
+  </Warning>
+</Accordion>
+
+## Error Handling
+
+The Canvas integration returns specific error strings for common failure cases:
+
+- **"Unauthorized"** - User session is invalid or expired
+- **"Settings not configured"** - Canvas credentials are missing from user settings
+- **String error message** - Canvas API returned an error (e.g., invalid token)
+
+Example error handling:
+
+```typescript
+const courses = await getAllCanvasCourses();
+
+if (courses === "Unauthorized") {
+  throw new Error("User is not authenticated");
+}
+
+if (courses === "Settings not configured") {
+  throw new Error("Canvas API credentials are not set up");
+}
+
+// courses is now CanvasCourse[]
+for (const course of courses) {
+  console.log(course.name);
+}
+```
+
+## Best Practices
+
+1. **Incremental Indexing**: Consider implementing incremental updates instead of re-indexing all content every time.
+
+2. **Rate Limiting**: Canvas API has rate limits. The current implementation uses parallel requests but doesn't implement explicit rate limiting.
+
+3. **Caching**: Consider caching frequently accessed course data to reduce API calls.
+
+4. **Token Rotation**: Implement token refresh mechanisms for long-lived sessions.
+
+5. **Error Recovery**: Handle partial failures gracefully when processing multiple courses.
+
+## Related Components
+
+- **Upstash Search Client**: Configured in `upstash-helpers.ts:22`
+- **Canvas Types**: Comprehensive TypeScript definitions in `/home/daytona/workspace/source/apps/web/src/types/canvas.ts`
+- **Canvas Helper Functions**: URL generation and utilities in `canvas-helpers.ts` and `canvas-llm-helpers.ts`
+- **Classes Actions**: Server actions for Canvas API calls in `classes-actions.ts`

@@ -1,0 +1,624 @@
+---
+title: "Architecture Overview"
+description: "Monorepo structure, workspace organization, build system, and development workflow for Maxw AI"
+---
+
+Maxw AI is built as a TypeScript monorepo using Turborepo for orchestration and Bun for package management, enabling efficient code sharing and development across web and mobile platforms.
+
+## Monorepo Structure
+
+The project follows a workspace-based monorepo pattern:
+
+```
+maxw-ai-v3/
+├── apps/
+│   ├── web/                 # Next.js 16 web application
+│   └── native/              # React Native mobile app with Expo
+├── packages/                # Shared packages (currently none)
+├── .env                     # Environment variables (root level)
+├── package.json             # Root package configuration
+├── turbo.json               # Turborepo pipeline configuration
+├── biome.json               # Biome linting and formatting config
+└── bun.lockb                # Bun lockfile
+```
+
+<Note>
+The monorepo currently has **no shared packages**, but the structure supports adding them in `packages/` for code sharing between web and mobile apps.
+</Note>
+
+## Workspace Organization
+
+### Package Manager: Bun
+
+The project uses **Bun 1.2.21** as the package manager:
+
+```json
+{
+  "packageManager": "bun@1.2.21",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}
+```
+
+<Warning>
+Always use **Bun** (not npm or yarn) for package management. Commands like `npm install` will create conflicting lockfiles.
+</Warning>
+
+Benefits of Bun:
+- **Fast installation**: 10-20x faster than npm
+- **TypeScript support**: Native TypeScript execution
+- **Drop-in replacement**: Compatible with npm packages
+- **Built-in tools**: Bundler, test runner, and package manager
+
+### Workspaces
+
+<Tabs>
+  <Tab title="apps/web">
+    **Next.js 16 Web Application**
+    
+    - Framework: Next.js 16 with App Router
+    - Runtime: Node.js / Vercel Edge
+    - Database: PostgreSQL with Drizzle ORM
+    - AI: Anthropic Claude, OpenAI, Google AI
+    - Styling: TailwindCSS 4 + shadcn/ui
+    
+    Main features:
+    - AI chat interface with streaming
+    - Canvas LMS integration
+    - Todo and study material management
+    - Better-Auth authentication
+  </Tab>
+  <Tab title="apps/native">
+    **React Native Mobile App**
+    
+    - Framework: React Native 0.81 + Expo 54
+    - Navigation: Expo Router
+    - Styling: NativeWind 4
+    - Platforms: iOS, Android, Web
+    
+    Main features:
+    - Cross-platform mobile experience
+    - Better-Auth Expo integration
+    - Shared authentication with web app
+    - Native performance optimizations
+  </Tab>
+  <Tab title="packages/*">
+    **Shared Packages** (Future)
+    
+    Potential shared packages:
+    - `@maxw/types`: Shared TypeScript types
+    - `@maxw/utils`: Common utilities
+    - `@maxw/ui`: Shared UI components
+    - `@maxw/config`: Shared configurations
+    
+    <Note>
+    No shared packages exist yet. The structure supports adding them as the codebase grows.
+    </Note>
+  </Tab>
+</Tabs>
+
+## Build System: Turborepo
+
+Turborepo orchestrates tasks across the monorepo with intelligent caching and parallel execution.
+
+### Turborepo Configuration
+
+The `turbo.json` file defines the build pipeline:
+
+```json
+{
+  "$schema": "https://turbo.build/schema.json",
+  "ui": "tui",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": ["dist/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    }
+  },
+  "globalEnv": [
+    "DATABASE_URL",
+    "AUTH_SECRET",
+    "UPSTASH_SEARCH_URL",
+    "UPSTASH_SEARCH_TOKEN",
+    "NEXT_PUBLIC_UPSTASH_SEARCH_TOKEN",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "GOOGLE_GENERATIVE_AI_API_KEY"
+  ]
+}
+```
+
+### Pipeline Tasks
+
+<CardGroup cols={2}>
+  <Card title="build" icon="hammer">
+    Production builds with dependency ordering and output caching
+  </Card>
+  <Card title="dev" icon="rocket">
+    Development servers with hot reload (no caching)
+  </Card>
+  <Card title="lint" icon="check">
+    Code quality checks across all workspaces
+  </Card>
+  <Card title="check-types" icon="typescript">
+    TypeScript type checking for all apps
+  </Card>
+</CardGroup>
+
+### Database Tasks
+
+Special tasks for database operations (run on web app only):
+
+- **db:push**: Push schema changes to database (development)
+- **db:studio**: Open Drizzle Studio UI
+- **db:generate**: Generate migration files
+- **db:migrate**: Run migrations (production)
+
+All database tasks are marked `cache: false` and `persistent: true`.
+
+## Development Workflow
+
+### Starting Development
+
+<Tabs>
+  <Tab title="All Apps">
+    ```bash
+    bun dev                  # Start all apps (web + native)
+    ```
+    
+    Starts:
+    - Web app on http://localhost:3000
+    - Mobile app with Expo dev server
+  </Tab>
+  <Tab title="Web Only">
+    ```bash
+    bun dev:web              # Start web app only
+    ```
+    
+    Uses Turbo filter: `turbo -F web dev`
+  </Tab>
+  <Tab title="Mobile Only">
+    ```bash
+    bun dev:native           # Start mobile app only
+    ```
+    
+    Uses Turbo filter: `turbo -F native dev`
+  </Tab>
+</Tabs>
+
+### Building Applications
+
+```bash
+# Build all apps
+bun build
+
+# Build specific apps
+bun build:web               # Web app only
+bun build:native            # Mobile app only
+
+# Type check all apps
+bun check-types
+```
+
+### Database Management
+
+<Warning>
+Database configuration is in the **root `.env` file**, not `apps/web/.env`. The Next.js config loads from `../../.env`.
+</Warning>
+
+```bash
+# Development workflow
+bun db:push                 # Push schema changes to database
+bun db:studio               # Open Drizzle Studio (http://localhost:4983)
+
+# Production workflow
+bun db:generate             # Generate migration SQL files
+bun db:migrate              # Apply migrations to database
+```
+
+All database commands run on the web app workspace:
+```json
+{
+  "db:push": "turbo -F web db:push",
+  "db:studio": "turbo -F web db:studio"
+}
+```
+
+### Code Quality
+
+```bash
+bun check                   # Run Biome linting and formatting with auto-fix
+```
+
+Biome checks:
+- Code formatting (double quotes, space indentation)
+- Linting rules (correctness, style, nursery)
+- Import organization
+- Tailwind class sorting
+
+## Code Conventions
+
+### Biome Configuration
+
+The project uses **Biome** (not ESLint/Prettier) for code quality:
+
+<CardGroup cols={2}>
+  <Card title="Formatter" icon="code">
+    Double quotes, space indentation, 80-character line width
+  </Card>
+  <Card title="Linter" icon="shield">
+    Recommended rules + custom style rules for consistency
+  </Card>
+  <Card title="Organizer" icon="sort">
+    Automatic import organization on save
+  </Card>
+  <Card title="Tailwind Sorter" icon="palette">
+    Automatic class sorting for cn(), clsx(), cva()
+  </Card>
+</CardGroup>
+
+Key Biome rules:
+```json
+{
+  "formatter": {
+    "indentStyle": "space"
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double"
+    }
+  },
+  "linter": {
+    "rules": {
+      "nursery": {
+        "useSortedClasses": {
+          "level": "warn",
+          "fix": "safe",
+          "options": {
+            "functions": ["clsx", "cva", "cn"]
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### File Naming Conventions
+
+- **Components**: PascalCase (`Button.tsx`, `UserProfile.tsx`)
+- **Utilities**: kebab-case (`date-helpers.ts`, `filter-builders.ts`)
+- **Types**: kebab-case (`filters.ts`, `auth-types.ts`)
+- **Routes**: kebab-case or `(groups)` for Next.js App Router
+
+### Import Organization
+
+Biome automatically organizes imports:
+
+1. External packages (React, Next.js, third-party)
+2. Internal modules (`@/ai`, `@/db`, `@/lib`)
+3. Relative imports (`./components`, `../utils`)
+
+### TypeScript Conventions
+
+- Use `interface` for object shapes
+- Use `type` for unions, intersections, and mapped types
+- Path alias: `@/` maps to `src/` in each app
+- Strict mode enabled in all workspaces
+
+## Environment Variables
+
+### Global Environment
+
+All environment variables are stored in the **root `.env` file**:
+
+```bash
+# Database
+DATABASE_URL=postgresql://...
+
+# Authentication
+AUTH_SECRET=your-secret-key
+
+# Upstash Search
+UPSTASH_SEARCH_URL=https://...
+UPSTASH_SEARCH_TOKEN=...
+NEXT_PUBLIC_UPSTASH_SEARCH_TOKEN=...
+
+# AI Providers
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GOOGLE_GENERATIVE_AI_API_KEY=...
+```
+
+<Note>
+The `globalEnv` array in `turbo.json` ensures these variables are available to all tasks and invalidates cache when they change.
+</Note>
+
+### Environment Validation
+
+The web app validates environment variables at build time using `@t3-oss/env-nextjs`:
+
+```typescript
+// apps/web/src/env.ts
+import { createEnv } from "@t3-oss/env-nextjs";
+import { z } from "zod";
+
+export const env = createEnv({
+  server: {
+    DATABASE_URL: z.string().url(),
+    AUTH_SECRET: z.string().min(32),
+    // ... other server variables
+  },
+  client: {
+    NEXT_PUBLIC_UPSTASH_SEARCH_TOKEN: z.string(),
+  },
+  runtimeEnv: process.env,
+});
+```
+
+This ensures:
+- Type safety for environment variables
+- Runtime validation on build
+- Clear error messages for missing or invalid variables
+
+## Turborepo Features
+
+### Remote Caching
+
+Turborepo supports remote caching for CI/CD:
+
+```bash
+# Link to Vercel Remote Cache
+turbo link
+
+# Run with remote cache
+turbo build --remote-cache
+```
+
+Benefits:
+- Share build cache across team and CI
+- Skip redundant builds
+- Faster CI/CD pipelines
+
+### Task Filtering
+
+Run tasks on specific workspaces:
+
+```bash
+# Run on single workspace
+turbo -F web build
+turbo -F native dev
+
+# Run on multiple workspaces
+turbo -F web -F native build
+
+# Run on all workspaces
+turbo build
+```
+
+### Dependency Graph
+
+Visualize the dependency graph:
+
+```bash
+turbo build --graph
+```
+
+Generates a DOT graph showing task dependencies and execution order.
+
+## Database Architecture
+
+### Schema Organization
+
+Database schemas are modular and located in `apps/web/src/db/schema/`:
+
+<Tabs>
+  <Tab title="Authentication">
+    **auth.ts**
+    
+    - `user`: Core user accounts with settings JSONB
+    - `session`: User sessions with IP tracking
+    - `account`: OAuth provider credentials
+    - `verification`: Email verification tokens
+    
+    All tables use cascade deletion for referential integrity.
+  </Tab>
+  <Tab title="Todo System">
+    **todo.ts**
+    
+    - `todo`: Task items with scheduling and Canvas linking
+    - Enums: `dateTypeEnum`, `canvasContentTypeEnum`
+    - Supports subtasks as JSONB array
+    - Foreign key to Canvas assignments
+  </Tab>
+  <Tab title="Study Materials">
+    **study.ts**
+    
+    - `studySet`: Study collection containers
+    - `studySetItem`: Flashcards and questions
+    - Item types: "term" or "question"
+  </Tab>
+  <Tab title="AI Memory">
+    **memory.ts**
+    
+    - User memory storage for AI agent
+    - Filesystem-like interface
+    - Persists across conversations
+  </Tab>
+</Tabs>
+
+### Migration Strategy
+
+<CardGroup cols={2}>
+  <Card title="Development" icon="flask">
+    Use `bun db:push` to sync schema changes directly without migrations
+  </Card>
+  <Card title="Production" icon="rocket">
+    Use `bun db:generate` and `bun db:migrate` for version-controlled migrations
+  </Card>
+</CardGroup>
+
+Migration files are stored in `apps/web/src/db/migrations/`.
+
+## Performance Optimizations
+
+### Build Performance
+
+- **Turborepo caching**: Skips unchanged tasks
+- **Parallel execution**: Runs independent tasks simultaneously
+- **Incremental builds**: Only rebuilds changed files
+- **Bun speed**: 10-20x faster package installation
+
+### Runtime Performance
+
+- **Next.js Server Components**: Reduced client bundle size
+- **React Native New Architecture**: Improved rendering performance
+- **Streaming SSR**: Faster time-to-first-byte
+- **Code splitting**: Automatic chunking via Next.js
+
+## CI/CD Integration
+
+Typical CI/CD pipeline with Turborepo:
+
+```yaml
+# .github/workflows/ci.yml
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: oven-sh/setup-bun@v1
+      
+      - run: bun install
+      - run: bun check-types
+      - run: bun check
+      - run: bun build
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+```
+
+<Note>
+Remote caching with Vercel Turborepo requires `TURBO_TOKEN` and `TURBO_TEAM` secrets for authentication.
+</Note>
+
+## Deployment Architecture
+
+<Tabs>
+  <Tab title="Web App">
+    **Vercel (Recommended)**
+    
+    - Automatic deployments from Git
+    - Edge runtime support
+    - Environment variable management
+    - Preview deployments for PRs
+    
+    ```bash
+    vercel --prod
+    ```
+  </Tab>
+  <Tab title="Mobile App">
+    **Expo Application Services (EAS)**
+    
+    - Cloud builds for iOS and Android
+    - Over-the-air (OTA) updates
+    - Submission to app stores
+    
+    ```bash
+    eas build --platform all
+    eas submit --platform all
+    ```
+  </Tab>
+  <Tab title="Database">
+    **Neon Serverless PostgreSQL**
+    
+    - Serverless Postgres with autoscaling
+    - Branching for preview environments
+    - Connection pooling built-in
+    
+    Set `DATABASE_URL` in environment variables.
+  </Tab>
+</Tabs>
+
+## Monitoring & Observability
+
+### Web App
+
+- **Vercel Analytics**: Page views and Web Vitals
+- **AI SDK DevTools**: AI interaction debugging
+- **React Query DevTools**: Server state inspection
+- **Drizzle Studio**: Database GUI for development
+
+### Mobile App
+
+- **Expo Development Tools**: Metro bundler and debugging
+- **React DevTools**: Component inspection
+- **Flipper**: Native debugging and network inspection
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Monorepo" icon="folder-tree">
+    Keep shared code in packages, app-specific code in apps
+  </Card>
+  <Card title="Environment" icon="key">
+    Store all variables in root .env, validate with Zod
+  </Card>
+  <Card title="Database" icon="database">
+    Use migrations in production, db:push in development
+  </Card>
+  <Card title="Code Quality" icon="sparkles">
+    Run `bun check` before committing, use Biome auto-fix
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+### Common Issues
+
+**Problem**: Turborepo cache not invalidating
+```bash
+turbo build --force              # Force rebuild without cache
+```
+
+**Problem**: Environment variables not loading
+- Ensure variables are in **root `.env`**, not `apps/web/.env`
+- Verify `globalEnv` array in `turbo.json`
+- Restart dev server after changing `.env`
+
+**Problem**: Type errors in monorepo
+```bash
+bun check-types                  # Check all workspaces
+```
+
+**Problem**: Bun lockfile conflicts
+- Always use `bun install`, never `npm install`
+- Delete `node_modules` and reinstall if needed
+
+## Future Enhancements
+
+<CardGroup cols={2}>
+  <Card title="Shared Packages" icon="package">
+    Extract common code into `packages/` for reuse
+  </Card>
+  <Card title="Testing" icon="flask">
+    Add Jest, Vitest, or Bun test for unit testing
+  </Card>
+  <Card title="Storybook" icon="book">
+    Document UI components with interactive stories
+  </Card>
+  <Card title="E2E Tests" icon="robot">
+    Implement Playwright or Cypress for end-to-end testing
+  </Card>
+</CardGroup>
