@@ -11,6 +11,10 @@ The `/api/metadata` endpoint returns information about the AI agents and tools a
   This endpoint is simplified for the current architecture where only the general agent is active. It returns hardcoded metadata with a 1-hour cache duration.
 </Info>
 
+<Warning>
+  The endpoint currently returns a **subset of available tools** for simplicity. The response includes only the main public-facing tools (code_execution, web_search, searchContent, createStudySet), but the agent actually has access to additional programmatic tools (getTodos, createTodo, updateTodo, deleteTodo, getClassAssignments, memory, web_fetch) that are documented below.
+</Warning>
+
 ## Endpoint
 
 ```

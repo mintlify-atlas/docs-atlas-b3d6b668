@@ -135,42 +135,33 @@ overdue = [a for a in assignments if is_overdue(a['due_at'])]
 print(f"Found {len(overdue)} overdue assignments")
 ```
 
-```python Parallel Processing
+```python Processing Assignments
 import json
-import asyncio
+from datetime import datetime
 
 # Fetch assignments
 result = await getClassAssignments({})
 assignments = json.loads(result)
 
-# Classify priority in parallel
-async def classify_priority(assignment):
-    result = await invokeLLM({
-        "prompt": f"Classify priority for: {assignment['name']}",
-        "priority": "speed",
-        "schema": {"priority": "string (high/medium/low)"}
+# Filter for urgent assignments
+def is_urgent(assignment):
+    if not assignment.get('due_at'):
+        return False
+    due_date = datetime.fromisoformat(assignment['due_at'].replace('Z', '+00:00'))
+    days_until_due = (due_date - datetime.now()).days
+    return days_until_due <= 3 and days_until_due >= 0
+
+urgent_assignments = [a for a in assignments if is_urgent(a)]
+
+# Create todos for urgent assignments
+for assignment in urgent_assignments:
+    await createTodo({
+        "title": f"Complete {assignment['name']}",
+        "dueDate": assignment['due_at'],
+        "canvasContentType": "assignment",
+        "canvasContentId": assignment['id'],
+        "canvasClassId": int(assignment['_classId'])
     })
-    response = json.loads(result)
-    return {
-        "assignment": assignment,
-        "priority": response["data"]["priority"]
-    }
-
-# Process in parallel
-classified = await asyncio.gather(
-    *[classify_priority(a) for a in assignments[:20]]
-)
-
-# Create todos for high priority
-for item in classified:
-    if item["priority"] == "high":
-        await createTodo({
-            "title": f"Complete {item['assignment']['name']}",
-            "dueDate": item['assignment']['due_at'],
-            "canvasContentType": "assignment",
-            "canvasContentId": item['assignment']['id'],
-            "canvasClassId": int(item['assignment']['_classId'])
-        })
 ```
 
 ```python Todo Management
@@ -251,15 +242,12 @@ From the system prompt:
 
 Documentation loaded into the code execution container:
 
-<CardGroup cols={3}>
+<CardGroup cols={2}>
   <Card title="canvas-assignments" icon="book">
     Canvas assignment data structure, fields, date handling, common patterns
   </Card>
   <Card title="todo-management" icon="check">
     Todo data structure, views, date types, Canvas linking, CRUD operations
-  </Card>
-  <Card title="llm-invocation" icon="robot">
-    Guide to using invokeLLM for parallel processing and classification
   </Card>
 </CardGroup>
 
