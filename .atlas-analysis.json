@@ -1,0 +1,109 @@
+{
+  "projectType": "saas",
+  "projectName": "Maxw AI",
+  "projectDescription": "An AI-powered educational platform combining web and mobile interfaces with advanced AI agents for learning assistance, task management, and content creation.",
+  "theme": "almond",
+  "primaryColor": "#040404",
+  "lightColor": "#fc7c04",
+  "darkColor": "#fcbc7c",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/ai-chat",
+              "features/study-tools",
+              "features/task-management",
+              "features/dashboard"
+            ]
+          },
+          {
+            "group": "AI Agents",
+            "pages": [
+              "ai/overview",
+              "ai/general-agent",
+              "ai/tools",
+              "ai/memory"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/canvas-lms",
+              "integrations/authentication"
+            ]
+          },
+          {
+            "group": "Platform",
+            "pages": [
+              "platform/web-app",
+              "platform/mobile-app",
+              "platform/architecture"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "api/overview",
+              "api/authentication"
+            ]
+          },
+          {
+            "group": "Chat API",
+            "pages": [
+              "api/chat/streaming",
+              "api/chat/metadata"
+            ]
+          },
+          {
+            "group": "Database Schema",
+            "pages": [
+              "api/schema/user",
+              "api/schema/todo",
+              "api/schema/study"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "AI-powered chat with streaming responses and multiple specialized agents",
+    "Educational dashboard for managing classes, assignments, and todos",
+    "Study tools with flashcards and question sets",
+    "Canvas LMS integration with semantic search",
+    "Cross-platform web and mobile applications",
+    "Persistent AI memory for personalized assistance",
+    "Real-time task management with calendar integration",
+    "Secure authentication with Better-Auth"
+  ],
+  "publicApiSurface": [
+    "POST /api/chat - AI chat streaming endpoint",
+    "POST /api/metadata - Chat metadata generation",
+    "POST /api/auth/* - Authentication endpoints",
+    "searchContent - Semantic search for Canvas content",
+    "getClassAssignments - Fetch assignments from Canvas",
+    "getTodos - Get user's todo list",
+    "createTodo - Create new todo item",
+    "updateTodo - Update existing todo",
+    "deleteTodo - Delete todo item",
+    "createStudySet - Generate flashcards for studying",
+    "memory - Store and retrieve user information"
+  ]
+}
